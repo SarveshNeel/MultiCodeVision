@@ -6,6 +6,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <chrono>
 
 namespace fs = std::filesystem;
 
@@ -230,7 +231,13 @@ int main(int argc, char** argv) {
             return 0;
         }
 
+        using clock = std::chrono::steady_clock;
+        const auto t0 = clock::now();
+
         auto results = detect_and_decode_parallel(img);
+
+        const auto t1 = clock::now();
+        const auto decode_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
         for (size_t i = 0; i < results.size(); ++i)
         {
@@ -252,6 +259,7 @@ int main(int argc, char** argv) {
                         2,
                         cv::LINE_AA);
         }
+        std::cout << "Decode + Result Generation Time: " << decode_ms << " ms" << std::endl;
 
         cv::imshow("QR Decode - " + input.filename().string(), img);
         cv::waitKey(0);
