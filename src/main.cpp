@@ -205,11 +205,11 @@ std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
             // Debug: classify ZXing result state
             // detected + decoded  => text non-empty
             // detected but decode failed => text empty
-            if (r.text.empty()) {
-                std::cout << "[ZXing] DETECTED (decode FAILED)" << std::endl;
-            } else {
-                std::cout << "[ZXing] DETECTED + DECODED" << std::endl;
-            }
+            // if (r.text.empty()) {
+            //     std::cout << "[ZXing] DETECTED (decode FAILED)" << std::endl;
+            // } else {
+            //     std::cout << "[ZXing] DETECTED + DECODED" << std::endl;
+            // }
 
             auto pos = zr.position();
             const float s = pass.coordScale;
@@ -257,7 +257,10 @@ static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
         std::cout << "No QR codes detected." << std::endl;
     } else {
         for (size_t i = 0; i < results.size(); ++i) {
-            std::cout << "QR " << i << ": " << results[i].text << std::endl;
+            if(showWindow)
+            {
+                std::cout << "QR " << i << ": " << results[i].text << std::endl;
+            }
 
             std::vector<cv::Point> poly;
             for (const auto& p : results[i].corners)
@@ -265,7 +268,17 @@ static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
 
             if (poly.size() >= 4)
                 cv::polylines(img, poly, true, {0,255,0}, 2);
+            
+            cv::putText(img,
+                "QR " + std::to_string(i),
+                poly[0],
+                cv::FONT_HERSHEY_SIMPLEX,
+                1.6,
+                cv::Scalar(0, 255, 0),
+                2,
+                cv::LINE_AA);
         }
+        std::cout << "Total QR codes detected: " << results.size() << std::endl;
     }
 
     std::cout << "Decode + Result Generation Time: " << decode_ms << " ms" << std::endl;
