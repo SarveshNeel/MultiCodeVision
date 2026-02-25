@@ -104,11 +104,13 @@ std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
     std::vector<QRResult> results;
 
     // ----- ZXing detection + decode (single pass, robust for small/rotated QR) -----
+    // Allow more symbols per frame (we expect up to 24+ codes)
     ZXing::ReaderOptions hints;
     hints.setFormats(ZXing::BarcodeFormat::QRCode);
     hints.setTryHarder(true);
     hints.setTryRotate(true);
     hints.setTryInvert(true);
+    hints.setMaxNumberOfSymbols(40);
     hints.setBinarizer(ZXing::Binarizer::LocalAverage);
 
     // cv::Mat gray;
@@ -121,24 +123,40 @@ std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
     else
         gray = img;
 
-    // preprocessing passes
-    std::vector<cv::Mat> passes;
-    passes.push_back(gray);
+    // preprocessing + multi-scale passes
+    struct ZXPass {
+        cv::Mat img;
+        // Factor to convert coordinates from this pass back to the original image
+        float coordScale;
+    };
+
+    std::vector<ZXPass> passes;
+    passes.push_back({gray, 1.0f});
 
     // CLAHE (VERY important for shiny cans)
     cv::Mat claheImg;
     {
         auto clahe = cv::createCLAHE(2.5, cv::Size(8,8));
         clahe->apply(gray, claheImg);
-        passes.push_back(claheImg);
+        passes.push_back({claheImg, 1.0f});
     }
 
     // adaptive threshold
     cv::Mat bw;
     cv::adaptiveThreshold(gray, bw, 255,
-                        cv::ADAPTIVE_THRESH_GAUSSIAN_C,
-                        cv::THRESH_BINARY, 31, 3);
-    passes.push_back(bw);
+                          cv::ADAPTIVE_THRESH_GAUSSIAN_C,
+                          cv::THRESH_BINARY, 31, 3);
+    passes.push_back({bw, 1.0f});
+
+    // Upscaled CLAHE pass to help with very small / distant QRs
+    {
+        cv::Mat srcForUpscale = claheImg.empty() ? gray : claheImg;
+        cv::Mat upScaled;
+        double upscale = 2.0;
+        cv::resize(srcForUpscale, upScaled, cv::Size(), upscale, upscale, cv::INTER_CUBIC);
+        // Coordinates from this pass need to be scaled back down
+        passes.push_back({upScaled, static_cast<float>(1.0 / upscale)});
+    }
 
     auto center_of = [](const QRResult& q) {
         cv::Point2f c(0.f, 0.f);
@@ -170,10 +188,10 @@ std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
     // results.reserve(zresults.size());
 
     // for (const auto& zr : zresults)
-    for (const auto& passImg : passes)
+    for (const auto& pass : passes)
     {
         cv::Mat tmp;
-        auto iv = to_zxing_imageview(passImg, tmp);
+        auto iv = to_zxing_imageview(pass.img, tmp);
         auto zresults = ZXing::ReadBarcodes(iv, hints);
 
         for (const auto& zr : zresults)
@@ -194,10 +212,11 @@ std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
             }
 
             auto pos = zr.position();
-            r.corners.push_back(cv::Point2f(pos.topLeft().x, pos.topLeft().y));
-            r.corners.push_back(cv::Point2f(pos.topRight().x, pos.topRight().y));
-            r.corners.push_back(cv::Point2f(pos.bottomRight().x, pos.bottomRight().y));
-            r.corners.push_back(cv::Point2f(pos.bottomLeft().x, pos.bottomLeft().y));
+            const float s = pass.coordScale;
+            r.corners.push_back(cv::Point2f(pos.topLeft().x * s, pos.topLeft().y * s));
+            r.corners.push_back(cv::Point2f(pos.topRight().x * s, pos.topRight().y * s));
+            r.corners.push_back(cv::Point2f(pos.bottomRight().x * s, pos.bottomRight().y * s));
+            r.corners.push_back(cv::Point2f(pos.bottomLeft().x * s, pos.bottomLeft().y * s));
 
             // Fallback for difficult symbols (includes upscaled retry)
             if (r.text.empty() && r.corners.size() == 4) {
