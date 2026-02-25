@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug OpenCV App",
+        "type": "lldb",
+        "request": "launch",
+        "program": "${workspaceFolder}/build/app",
+        "args": ["images/MultiQR.png"],
+        "cwd": "${workspaceFolder}",
+        "stopOnEntry": false
+      }
+    ]
+  }

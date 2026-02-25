@@ -1,6 +1,13 @@
 # ===== Compiler =====
 CXX := g++
+
+# Build type: use DEBUG=1 for debugger-friendly builds
+# Example: make clean && make DEBUG=1
+ifeq ($(DEBUG),1)
+CXXFLAGS := -std=c++17 -g -O0 -Wall -Wextra -fno-omit-frame-pointer
+else
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra
+endif
 
 # ===== OpenCV =====
 OPENCV_CFLAGS := $(shell pkg-config --cflags opencv4)
@@ -39,4 +46,11 @@ clean:
 run: all
 	./$(TARGET)
 
-.PHONY: all clean run
+# Debug convenience target
+# Usage: make debug
+# (performs a clean rebuild with debug symbols)
+debug:
+	$(MAKE) clean
+	$(MAKE) DEBUG=1 all
+
+.PHONY: all clean run debug
