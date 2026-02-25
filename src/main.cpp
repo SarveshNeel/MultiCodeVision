@@ -184,16 +184,25 @@ std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
             QRResult r;
             r.text = zr.text();
 
-            // fallback for difficult symbols
-            if (r.text.empty() && r.corners.size() == 4) {
-                r.text = decode_with_fallback(img, r.corners);
+            // Debug: classify ZXing result state
+            // detected + decoded  => text non-empty
+            // detected but decode failed => text empty
+            if (r.text.empty()) {
+                std::cout << "[ZXing] DETECTED (decode FAILED)" << std::endl;
+            } else {
+                std::cout << "[ZXing] DETECTED + DECODED" << std::endl;
             }
-            
+
             auto pos = zr.position();
             r.corners.push_back(cv::Point2f(pos.topLeft().x, pos.topLeft().y));
             r.corners.push_back(cv::Point2f(pos.topRight().x, pos.topRight().y));
             r.corners.push_back(cv::Point2f(pos.bottomRight().x, pos.bottomRight().y));
             r.corners.push_back(cv::Point2f(pos.bottomLeft().x, pos.bottomLeft().y));
+
+            // Fallback for difficult symbols (includes upscaled retry)
+            if (r.text.empty() && r.corners.size() == 4) {
+                r.text = decode_with_fallback(img, r.corners);
+            }
 
             bool dup = false;
             for (const auto& existing : results) {
@@ -202,7 +211,7 @@ std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
                     break;
                 }
             }
-            if (!dup)
+            if (!dup && !r.text.empty())
                 results.push_back(std::move(r));
         }
     }
