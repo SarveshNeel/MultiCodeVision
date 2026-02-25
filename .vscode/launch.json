@@ -6,9 +6,16 @@
         "type": "lldb",
         "request": "launch",
         "program": "${workspaceFolder}/build/app",
-        "args": ["images/MultiQR.png"],
+        "args": ["${input:imagePath}"],
         "cwd": "${workspaceFolder}",
         "stopOnEntry": false
       }
+    ],
+    "inputs": [
+        {
+            "id": "imagePath",
+            "type": "promptString",
+            "description": "Enter Image Path:"
+        }
     ]
   }
