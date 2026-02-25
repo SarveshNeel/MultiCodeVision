@@ -1,6 +1,7 @@
 Requirements 
 
 OpenCV 4.x
+ZXing-cpp 3.x
 C++17 Compiler (g++)
 pkg-config
 make

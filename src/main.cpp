@@ -1,12 +1,18 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/objdetect.hpp>
 
+#include <ZXing/ReadBarcode.h>
+#include <ZXing/BarcodeFormat.h>
+#include <ZXing/ReaderOptions.h>
+#include <ZXing/ImageView.h>
+
 #include <filesystem>
-#include <future>
 #include <iostream>
 #include <string>
 #include <vector>
 #include <chrono>
+#include <thread>
+#include <atomic>
 
 namespace fs = std::filesystem;
 
@@ -14,6 +20,16 @@ struct QRResult {
     std::string text;
     std::vector<cv::Point2f> corners;
 };
+
+static ZXing::ImageView to_zxing_imageview(const cv::Mat& img, cv::Mat& gray_out)
+{
+    if (img.channels() == 3)
+        cv::cvtColor(img, gray_out, cv::COLOR_BGR2GRAY);
+    else
+        gray_out = img;
+
+    return ZXing::ImageView(gray_out.data, gray_out.cols, gray_out.rows, ZXing::ImageFormat::Lum);
+}
 
 static cv::Mat warp_qr_patch(const cv::Mat& img, const std::vector<cv::Point2f>& corners, int out_size = 256)
 {
@@ -81,141 +97,176 @@ static bool has_image_extension(const fs::path& p) {
     return e == ".jpg" || e == ".jpeg" || e == ".png" || e == ".bmp" || e == ".tif" || e == ".tiff" || e == ".webp";
 }
 
+// ZXing-based detector/decoder.
+// More robust than OpenCV detectMulti() for small and rotated QR codes.
 std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
 {
-    cv::QRCodeDetector detector;
-
-    cv::Mat points;
-
-    // -------- STAGE 1: detect --------
-    bool found = detector.detectMulti(img, points);
-
     std::vector<QRResult> results;
-    if (!found || points.empty())
-        return results;
 
-    int n_qr = points.rows;
+    // ----- ZXing detection + decode (single pass, robust for small/rotated QR) -----
+    ZXing::ReaderOptions hints;
+    hints.setFormats(ZXing::BarcodeFormat::QRCode);
+    hints.setTryHarder(true);
+    hints.setTryRotate(true);
+    hints.setTryInvert(true);
+    hints.setBinarizer(ZXing::Binarizer::LocalAverage);
 
-    std::vector<std::future<QRResult>> futures;
+    // cv::Mat gray;
+    // auto iv = to_zxing_imageview(img, gray);
+    // auto zresults = ZXing::ReadBarcodes(iv, hints);
 
-    // -------- STAGE 2+3: ROI + parallel decode --------
-    for (int i = 0; i < n_qr; ++i)
+    cv::Mat gray;
+    if (img.channels() == 3)
+        cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
+    else
+        gray = img;
+
+    // preprocessing passes
+    std::vector<cv::Mat> passes;
+    passes.push_back(gray);
+
+    // CLAHE (VERY important for shiny cans)
+    cv::Mat claheImg;
     {
-        futures.push_back(
-            std::async(std::launch::async,
-                [&, i]() -> QRResult {
-
-                    QRResult r;
-
-                    std::vector<cv::Point2f> poly;
-                    for (int j = 0; j < points.cols; ++j)
-                    {
-                        poly.push_back(points.at<cv::Point2f>(i, j));
-                    }
-
-                    r.corners = poly;
-
-                    // Decode using ROI + perspective-warp fallback
-                    r.text = decode_with_fallback(img, poly);
-
-                    return r;
-                }));
+        auto clahe = cv::createCLAHE(2.5, cv::Size(8,8));
+        clahe->apply(gray, claheImg);
+        passes.push_back(claheImg);
     }
 
-    // Collect results
-    for (auto& f : futures)
+    // adaptive threshold
+    cv::Mat bw;
+    cv::adaptiveThreshold(gray, bw, 255,
+                        cv::ADAPTIVE_THRESH_GAUSSIAN_C,
+                        cv::THRESH_BINARY, 31, 3);
+    passes.push_back(bw);
+
+    auto center_of = [](const QRResult& q) {
+        cv::Point2f c(0.f, 0.f);
+        if (q.corners.size() != 4)
+            return c;
+        for (const auto& p : q.corners)
+            c += p;
+        c *= 0.25f;
+        return c;
+    };
+
+    auto is_duplicate = [&](const QRResult& a, const QRResult& b) {
+        // Prefer exact text match when available
+        if (!a.text.empty() && !b.text.empty() && a.text == b.text)
+            return true;
+
+        // Fallback: same spatial location (helps when text decode differs across passes)
+        if (a.corners.size() == 4 && b.corners.size() == 4) {
+            const cv::Point2f ca = center_of(a);
+            const cv::Point2f cb = center_of(b);
+            return cv::norm(ca - cb) < 18.0f;
+        }
+        return false;
+    };
+
+    // if (zresults.empty())
+    //     return results;
+
+    // results.reserve(zresults.size());
+
+    // for (const auto& zr : zresults)
+    for (const auto& passImg : passes)
     {
-        results.push_back(f.get());
-        if (results.back().text.empty()) {
-            // Keep empty string if decode failed; caller can decide how to handle it.
+        cv::Mat tmp;
+        auto iv = to_zxing_imageview(passImg, tmp);
+        auto zresults = ZXing::ReadBarcodes(iv, hints);
+
+        for (const auto& zr : zresults)
+        {
+            if (!zr.isValid())
+                continue;
+
+            QRResult r;
+            r.text = zr.text();
+
+            // fallback for difficult symbols
+            if (r.text.empty() && r.corners.size() == 4) {
+                r.text = decode_with_fallback(img, r.corners);
+            }
+            
+            auto pos = zr.position();
+            r.corners.push_back(cv::Point2f(pos.topLeft().x, pos.topLeft().y));
+            r.corners.push_back(cv::Point2f(pos.topRight().x, pos.topRight().y));
+            r.corners.push_back(cv::Point2f(pos.bottomRight().x, pos.bottomRight().y));
+            r.corners.push_back(cv::Point2f(pos.bottomLeft().x, pos.bottomLeft().y));
+
+            bool dup = false;
+            for (const auto& existing : results) {
+                if (is_duplicate(existing, r)) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (!dup)
+                results.push_back(std::move(r));
         }
     }
 
     return results;
 }
 
-//decode_qr_in_image() is a simple single-threaded implementation that uses OpenCV's detectAndDecodeMulti.
-//detect → warp → decode → repeat (serially)
-//Problems:
-// •	single-threaded
-// •	decode becomes bottleneck
-// •	harder to control preprocessing
-static void decode_qr_in_image(const fs::path& image_path) {
-    cv::Mat img = cv::imread(image_path.string(), cv::IMREAD_COLOR);
+static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
+{
+    cv::Mat img = cv::imread(imagePath.string(), cv::IMREAD_COLOR);
     if (img.empty()) {
-        std::cerr << "[ERROR] Failed to load image: " << image_path << std::endl;
+        std::cerr << "[ERROR] Failed to load image: " << imagePath << std::endl;
         return;
     }
 
-    cv::QRCodeDetector detector;
-    std::vector<std::string> decoded;
-    cv::Mat points;
+    using clock = std::chrono::steady_clock;
+    const auto t0 = clock::now();
+    auto results = detect_and_decode_parallel(img);
+    const auto t1 = clock::now();
+    const auto decode_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
-    bool ok = detector.detectAndDecodeMulti(img, decoded, points);
-
-    std::cout << "\n=== " << image_path.filename().string() << " ===" << std::endl;
-    if (!ok || decoded.empty()) {
+    std::cout << "\n=== " << imagePath.filename().string() << " ===" << std::endl;
+    if (results.empty()) {
         std::cout << "No QR codes detected." << std::endl;
-        return;
-    }
+    } else {
+        for (size_t i = 0; i < results.size(); ++i) {
+            std::cout << "QR " << i << ": " << results[i].text << std::endl;
 
-    for (size_t i = 0; i < decoded.size(); ++i) {
-        std::cout << "QR " << i << ": " << decoded[i] << std::endl;
-    }
+            std::vector<cv::Point> poly;
+            for (const auto& p : results[i].corners)
+                poly.emplace_back(cvRound(p.x), cvRound(p.y));
 
-    // Optional visualization: draw polygons around detected QRs
-    // OpenCV returns points as an Nx4 CV_32FC2 matrix for detectAndDecodeMulti.
-    // Shape is typically [N, 4, 2] internally; access it as Point2f.
-    if (!points.empty()) {
-        // Ensure expected type
-        if (points.type() == CV_32FC2) {
-            int n_qr = points.rows;
-            int n_corners = points.cols;
-
-            for (int i = 0; i < n_qr; ++i) {
-                std::vector<cv::Point> poly;
-                poly.reserve(n_corners);
-
-                for (int j = 0; j < n_corners; ++j) {
-                    cv::Point2f pt = points.at<cv::Point2f>(i, j);
-                    poly.emplace_back(cvRound(pt.x), cvRound(pt.y));
-                }
-
-                if (poly.size() >= 4) {
-                    cv::polylines(img, poly, true, cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
-
-                    // Label near first corner for easier debugging
-                    cv::putText(img,
-                                "QR " + std::to_string(i),
-                                poly[0],
-                                cv::FONT_HERSHEY_SIMPLEX,
-                                0.6,
-                                cv::Scalar(0, 255, 0),
-                                2,
-                                cv::LINE_AA);
-                }
-            }
-        } else {
-            std::cerr << "[WARN] Unexpected points type from detectAndDecodeMulti: "
-                      << points.type() << std::endl;
+            if (poly.size() >= 4)
+                cv::polylines(img, poly, true, {0,255,0}, 2);
         }
     }
 
-    // Show annotated result (press any key to continue)
-    cv::imshow("QR Decode - " + image_path.filename().string(), img);
-    cv::waitKey(0);
-    cv::destroyAllWindows();
+    std::cout << "Decode + Result Generation Time: " << decode_ms << " ms" << std::endl;
+
+    if (showWindow) {
+        cv::imshow("QR Decode - " + imagePath.filename().string(), img);
+        cv::waitKey(0);
+        cv::destroyAllWindows();
+    }
 }
 
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cout << "Usage:\n"
-                  << "  ./app <image_path>\n"
-                  << "  ./app <directory_path>\n";
+                  << "  ./app <image_path> [--batch]\n"
+                  << "  ./app <directory_path> [--batch]\n"
+                  << "\nOptions:\n"
+                  << "  --batch   Process without opening preview windows\n";
         return 1;
     }
 
     fs::path input = argv[1];
+
+    bool showWindow = true;
+    if (argc >= 3) {
+        std::string opt = argv[2];
+        if (opt == "--batch")
+            showWindow = false;
+    }
 
     if (!fs::exists(input)) {
         std::cerr << "[ERROR] Path does not exist: " << input << std::endl;
@@ -223,55 +274,18 @@ int main(int argc, char** argv) {
     }
 
     if (fs::is_regular_file(input)) {
-        // decode_qr_in_image(input);
-
-        cv::Mat img = cv::imread(input.string(), cv::IMREAD_COLOR);
-        if (img.empty()) {
-            std::cerr << "[ERROR] Failed to load image: " << input << std::endl;
-            return 0;
-        }
-
-        using clock = std::chrono::steady_clock;
-        const auto t0 = clock::now();
-
-        auto results = detect_and_decode_parallel(img);
-
-        const auto t1 = clock::now();
-        const auto decode_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
-
-        for (size_t i = 0; i < results.size(); ++i)
-        {
-            std::cout << "QR " << i << ": " << results[i].text << std::endl;
-
-            std::vector<cv::Point> poly;
-            for (auto& p : results[i].corners)
-                poly.emplace_back(cvRound(p.x), cvRound(p.y));
-
-            cv::polylines(img, poly, true, {0,255,0}, 2);
-
-            // Label near first corner for easier debugging
-            cv::putText(img,
-                        "QR " + std::to_string(i),
-                        poly[0],
-                        cv::FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        cv::Scalar(0, 255, 0),
-                        2,
-                        cv::LINE_AA);
-        }
-        std::cout << "Decode + Result Generation Time: " << decode_ms << " ms" << std::endl;
-
-        cv::imshow("QR Decode - " + input.filename().string(), img);
-        cv::waitKey(0);
-        cv::destroyAllWindows();
+        process_image_with_zxing(input, showWindow);
         return 0;
     }
 
     if (fs::is_directory(input)) {
         for (const auto& entry : fs::directory_iterator(input)) {
-            if (!entry.is_regular_file()) continue;
-            if (!has_image_extension(entry.path())) continue;
-            decode_qr_in_image(entry.path());
+            if (!entry.is_regular_file())
+                continue;
+            if (!has_image_extension(entry.path()))
+                continue;
+
+            process_image_with_zxing(entry.path(), showWindow);
         }
         return 0;
     }
