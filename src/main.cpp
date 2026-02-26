@@ -13,8 +13,22 @@
 #include <chrono>
 #include <thread>
 #include <atomic>
+#include <iomanip>
+#include <sstream>
 
 namespace fs = std::filesystem;
+
+enum LogLevel {
+    ERROR,
+    INFO,
+    DEBUG,
+    TRACE
+};
+
+static LogLevel LOG_LEVEL = INFO;
+
+#define LOG(level, msg) \
+    do { if ((level) <= LOG_LEVEL) { std::cout << msg << std::endl; } } while (0)
 
 struct QRResult {
     std::string text;
@@ -24,9 +38,43 @@ struct QRResult {
 // preprocessing + multi-scale passes
 struct ZXPass {
     cv::Mat img;
-    // Factor to convert coordinates from this pass back to the original image
-    float coordScale;
+    float coordScale; // Factor to convert coordinates from this pass back to the original image
+    std::string type; // for debugging
 };
+
+struct PassStats {
+    std::string name;
+    int raw = 0;      // raw ZXing results in this pass
+    int added = 0;    // unique results added after dedup
+    double ms = 0.0;  // elapsed time for this pass
+};
+
+struct ScopedTimer {
+    std::string name;
+    std::chrono::steady_clock::time_point start;
+
+    ScopedTimer(const std::string &n) : name(n), start(std::chrono::steady_clock::now()) {}
+
+    ~ScopedTimer() {
+        auto end = std::chrono::steady_clock::now();
+        double ms = std::chrono::duration<double, std::milli>(end - start).count();
+
+        LOG(DEBUG, "[TIME] " << name << ": " << ms << " ms");
+    }
+};
+
+static inline double elapsed_ms(const std::chrono::steady_clock::time_point& a,
+                                const std::chrono::steady_clock::time_point& b)
+{
+    return std::chrono::duration<double, std::milli>(b - a).count();
+}
+
+// Helper to format float nicely
+std::string format_scale(float s) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(1) << s;
+    return oss.str();
+}
 
 static ZXing::ImageView to_zxing_imageview(const cv::Mat& img, cv::Mat& gray_out)
 {
@@ -109,6 +157,8 @@ static bool has_image_extension(const fs::path& p) {
 std::vector<QRResult> detect_and_decode(const cv::Mat& img)
 {
     std::vector<QRResult> results;
+    std::vector<PassStats> passStats;
+    passStats.reserve(16);
 
     // ----- ZXing detection + decode (single pass, robust for small/rotated QR) -----
     // Allow more symbols per frame (we expect up to 24+ codes)
@@ -120,10 +170,6 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
     hints.setMaxNumberOfSymbols(40);
     hints.setBinarizer(ZXing::Binarizer::LocalAverage);
 
-    // cv::Mat gray;
-    // auto iv = to_zxing_imageview(img, gray);
-    // auto zresults = ZXing::ReadBarcodes(iv, hints);
-
     cv::Mat gray;
     if (img.channels() == 3)
         cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
@@ -131,27 +177,19 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
         gray = img;
 
     std::vector<ZXPass> passes;
-    passes.push_back({gray, 1.0f});
+    passes.push_back({gray, 1.0f, "Original Gray"});
 
     // cv::Mat sharpened;
     // cv::GaussianBlur(gray, sharpened, cv::Size(0, 0), 1.0);
     // cv::addWeighted(gray, 1.5, sharpened, -0.5, 0, sharpened);
     // passes.push_back({sharpened, 1.0f});
 
-    // CLAHE (VERY important for shiny cans)
-    cv::Mat claheImg;
-    {
-        auto clahe = cv::createCLAHE(2.5, cv::Size(8,8));
-        clahe->apply(gray, claheImg);
-        passes.push_back({claheImg, 1.0f});
-    }
-
     // adaptive threshold
     cv::Mat bw;
     cv::adaptiveThreshold(gray, bw, 255,
                           cv::ADAPTIVE_THRESH_GAUSSIAN_C,
                           cv::THRESH_BINARY, 31, 3);
-    passes.push_back({bw, 1.0f});
+    passes.push_back({bw, 1.0f, "Original Gray + Adaptive Threshold"});
 
     // Upscaled CLAHE pass to help with very small / distant QRs
     // {
@@ -170,7 +208,15 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
     for (float scale : scales) {
         cv::Mat scaled;
         cv::resize(baseImage, scaled, cv::Size(), scale, scale, cv::INTER_CUBIC);
-        passes.push_back({scaled, 1.0f / scale});
+        passes.push_back({scaled, 1.0f / scale, "Original Gray + Upscaled x" + format_scale(scale)});
+    }
+
+    // CLAHE (VERY important for shiny cans)
+    cv::Mat claheImg;
+    {
+        auto clahe = cv::createCLAHE(2.5, cv::Size(8,8));
+        clahe->apply(gray, claheImg);
+        passes.push_back({claheImg, 1.0f, "CLAHE"});
     }
 
     scales = {4.0f};
@@ -178,7 +224,7 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
     for (float scale : scales) {
         cv::Mat scaled;
         cv::resize(baseImage, scaled, cv::Size(), scale, scale, cv::INTER_CUBIC);
-        passes.push_back({scaled, 1.0f / scale});
+        passes.push_back({scaled, 1.0f / scale, "CLAHE + Upscaled x" + format_scale(scale) });
     }
 
     auto center_of = [](const QRResult& q) {
@@ -213,9 +259,16 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
     // for (const auto& zr : zresults)
     for (const auto& pass : passes)
     {
+        PassStats stats;
+        stats.name = pass.type;
+
+        const auto start_timer = std::chrono::steady_clock::now();
+
         cv::Mat tmp;
         auto iv = to_zxing_imageview(pass.img, tmp);
         auto zresults = ZXing::ReadBarcodes(iv, hints);
+
+        stats.raw = static_cast<int>(zresults.size());
 
         for (const auto& zr : zresults)
         {
@@ -253,10 +306,31 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
                     break;
                 }
             }
-            if (!dup && !r.text.empty())
+            if (!dup && !r.text.empty()) {
                 results.push_back(std::move(r));
+                stats.added++;
+            }
         }
+        const auto end_timer = std::chrono::steady_clock::now();
+
+        stats.ms = elapsed_ms(start_timer, end_timer);
+        passStats.push_back(std::move(stats));
     }
+
+    LOG(INFO, "\n[PASS SUMMARY]");
+    LOG(INFO, "-----------------------------------------------");
+    LOG(INFO, "Pass Name                               Raw   Added   Time(ms)");
+    LOG(INFO, "-----------------------------------------------");
+    for (const auto& s : passStats) {
+        std::ostringstream oss;
+        oss << std::left << std::setw(36) << s.name
+            << std::right << std::setw(6) << s.raw
+            << std::setw(8) << s.added
+            << std::setw(11) << std::fixed << std::setprecision(3) << s.ms;
+        LOG(INFO, oss.str());
+    }
+    LOG(INFO, "-----------------------------------------------");
+    LOG(INFO, "Total unique decoded: " << results.size());
 
     return results;
 }
@@ -269,20 +343,22 @@ static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
         return;
     }
 
+    std::cout << "\n======================= " << imagePath.filename().string() << " =======================" << std::endl;
     using clock = std::chrono::steady_clock;
-    const auto t0 = clock::now();
-    auto results = detect_and_decode(img);
-    const auto t1 = clock::now();
-    const auto decode_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
-    std::cout << "\n=== " << imagePath.filename().string() << " ===" << std::endl;
+    const auto start_timer = clock::now();
+    auto results = detect_and_decode(img);
+    const auto end_timer = clock::now();
+
+    const auto decode_ms = elapsed_ms(start_timer, end_timer);
+
     if (results.empty()) {
-        std::cout << "No QR codes detected." << std::endl;
+        // std::cout << "No QR codes detected." << std::endl;
     } else {
         for (size_t i = 0; i < results.size(); ++i) {
             if(showWindow)
             {
-                std::cout << "QR " << i << ": " << results[i].text << std::endl;
+                // std::cout << "QR " << i << ": " << results[i].text << std::endl;
             }
 
             std::vector<cv::Point> poly;
@@ -301,10 +377,10 @@ static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
                 2,
                 cv::LINE_AA);
         }
-        std::cout << "Total QR codes detected: " << results.size() << std::endl;
+        // std::cout << std::endl << "Total QR codes detected: " << results.size() << std::endl << std::endl;
     }
 
-    std::cout << "Decode + Result Generation Time: " << decode_ms << " ms" << std::endl;
+    std::cout << "Detection & Decode Time: " << decode_ms << " ms" << std::endl << std::endl;
 
     if (showWindow) {
         cv::imshow("QR Decode - " + imagePath.filename().string(), img);
