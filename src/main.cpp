@@ -197,7 +197,7 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
     // cv::Mat sharpened;
     // cv::GaussianBlur(gray, sharpened, cv::Size(0, 0), 1.0);
     // cv::addWeighted(gray, 1.5, sharpened, -0.5, 0, sharpened);
-    // passes.push_back({sharpened, 1.0f});
+    // passes.push_back({sharpened, 1.0f, "Original Gray + Gaussian Blur Sharpen"});
 
     // adaptive threshold
     cv::Mat bw;
@@ -378,7 +378,7 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
         hr();
     };
 
-    if(showWindow){
+    if (showWindow) {
         print_pass_summary();
     }
 
@@ -391,10 +391,6 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
 
 static void print_results_table(const std::vector<QRResult>& results)
 {
-    if(showWindow == false){
-        return;
-    }
-
     if (results.empty()) {
         LOG(INFO, "[RESULTS] No decoded QR strings.");
         return;
@@ -459,11 +455,13 @@ static void print_results_table(const std::vector<QRResult>& results)
 
 static void print_folder_summary_table(const std::vector<AggregatePassStats>& agg,
                                        int imageCount,
-                                       long long totalDecoded)
+                                       long long totalDecoded,
+                                       double totalDecodingTime,
+                                       double totalPassTime)
 {
     LOG(INFO, "\n======================================== FOLDER SUMMARY ========================================");
     LOG(INFO, "Images processed: " << imageCount);
-    LOG(INFO, "Total decoded across folder: " << totalDecoded);
+    LOG(INFO, "Total QRs decoded across folder: " << totalDecoded);
 
     if (agg.empty()) {
         LOG(INFO, "No pass statistics available.");
@@ -519,14 +517,25 @@ static void print_folder_summary_table(const std::vector<AggregatePassStats>& ag
         LOG(INFO, oss.str());
     }
     hr();
+
+    double avgDecodingTimePerImage = imageCount > 0 ? totalDecodingTime / imageCount : 0.0;
+    LOG(INFO, "Avg Time for Complete Decoding per Image: " << avgDecodingTimePerImage << " ms" << std::endl);
+
+    double avgPassTimePerImage = imageCount > 0 ? totalPassTime / imageCount : 0.0;
+    LOG(INFO, "Avg Time for Processing all Passes per Image: " << avgPassTimePerImage << " ms" << std::endl);
+
+    double avgTimeToApplyPass = avgDecodingTimePerImage - avgPassTimePerImage;
+    LOG(INFO, "Avg Time to Apply all Passes per Image: " << avgTimeToApplyPass << " ms" << std::endl);
 }
 
-static void process_image_with_zxing(const fs::path& imagePath)
+static double process_image_with_zxing(const fs::path& imagePath)
 {
+    double decode_ms = 0.0;
+
     cv::Mat img = cv::imread(imagePath.string(), cv::IMREAD_COLOR);
     if (img.empty()) {
         std::cerr << "[ERROR] Failed to load image: " << imagePath << std::endl;
-        return;
+        return decode_ms;
     }
 
     std::cout << "\n======================================== " << imagePath.filename().string() << " ========================================" << std::endl;
@@ -536,41 +545,40 @@ static void process_image_with_zxing(const fs::path& imagePath)
     auto results = detect_and_decode(img);
     const auto end_timer = clock::now();
 
-    const auto decode_ms = elapsed_ms(start_timer, end_timer);
+    decode_ms = elapsed_ms(start_timer, end_timer);
 
-    if (results.empty()) {
-        // std::cout << "No QR codes detected." << std::endl;
-    } else {
-        for (size_t i = 0; i < results.size(); ++i) {
+    for (size_t i = 0; i < results.size(); ++i) {
 
-            std::vector<cv::Point> poly;
-            for (const auto& p : results[i].corners)
-                poly.emplace_back(cvRound(p.x), cvRound(p.y));
+        std::vector<cv::Point> poly;
+        for (const auto& p : results[i].corners)
+            poly.emplace_back(cvRound(p.x), cvRound(p.y));
 
-            if (poly.size() >= 4)
-                cv::polylines(img, poly, true, {0,255,0}, 2);
-            
-            cv::putText(img,
-                "QR " + std::to_string(i),
-                poly[0],
-                cv::FONT_HERSHEY_SIMPLEX,
-                1.6,
-                cv::Scalar(0, 255, 0),
-                2,
-                cv::LINE_AA);
-        }
-        // std::cout << std::endl << "Total QR codes detected: " << results.size() << std::endl << std::endl;
+        if (poly.size() >= 4)
+            cv::polylines(img, poly, true, {0,255,0}, 2);
+        
+        cv::putText(img,
+            "QR " + std::to_string(i),
+            poly[0],
+            cv::FONT_HERSHEY_SIMPLEX,
+            1.6,
+            cv::Scalar(0, 255, 0),
+            2,
+            cv::LINE_AA);
     }
 
     std::cout << "Decoding Time: " << decode_ms << " ms" << std::endl << std::endl;
 
-    print_results_table(results);
+    if (showWindow) {
+        print_results_table(results);
+    }
 
     if (showWindow) {
         cv::imshow("QR Decode - " + imagePath.filename().string(), img);
         cv::waitKey(0);
         cv::destroyAllWindows();
     }
+
+    return decode_ms;
 }
 
 int main(int argc, char** argv) {
@@ -616,13 +624,15 @@ int main(int argc, char** argv) {
             return folderAgg.back();
         };
 
+        double totalDecodingTime = 0.0;
+        double totalPassTime = 0.0;
         for (const auto& entry : fs::directory_iterator(input)) {
             if (!entry.is_regular_file())
                 continue;
             if (!has_image_extension(entry.path()))
                 continue;
 
-            process_image_with_zxing(entry.path());
+            totalDecodingTime += process_image_with_zxing(entry.path());
             imageCount++;
 
             // Aggregate per-pass stats from last processed image
@@ -641,6 +651,11 @@ int main(int argc, char** argv) {
             for (const auto& ps : g_lastPassStats)
                 perImageAdded += ps.added;
             totalDecoded += perImageAdded;
+
+            //Calculate total time spent for processing all passes across the folder
+            for(const auto& ps : g_lastPassStats) {
+                totalPassTime += ps.ms;
+            }
         }
 
         // sort by usefulness: added desc, then time asc
@@ -650,7 +665,7 @@ int main(int argc, char** argv) {
             return a.ms < b.ms;
         });
 
-        print_folder_summary_table(folderAgg, imageCount, totalDecoded);
+        print_folder_summary_table(folderAgg, imageCount, totalDecoded, totalDecodingTime, totalPassTime);
         return 0;
     }
 
