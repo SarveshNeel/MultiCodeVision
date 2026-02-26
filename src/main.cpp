@@ -50,6 +50,15 @@ struct PassStats {
     double ms = 0.0;  // elapsed time for this pass
 };
 
+struct AggregatePassStats {
+    std::string name;
+    long long raw = 0;
+    long long added = 0;
+    double ms = 0.0;
+    int imagesSeen = 0;
+    int imagesContributed = 0; // images where this pass added >=1
+};
+
 struct ScopedTimer {
     std::string name;
     std::chrono::steady_clock::time_point start;
@@ -69,6 +78,9 @@ static inline double elapsed_ms(const std::chrono::steady_clock::time_point& a,
 {
     return std::chrono::duration<double, std::milli>(b - a).count();
 }
+
+// Global storage for last-run pass stats for aggregation
+static std::vector<PassStats> g_lastPassStats;
 
 // Helper to format float nicely
 std::string format_scale(float s) {
@@ -365,6 +377,8 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
         LOG(INFO, "Total unique decoded: " << results.size());
     }
 
+    g_lastPassStats = passStats;
+
     return results;
 }
 
@@ -430,6 +444,70 @@ static void print_results_table(const std::vector<QRResult>& results)
 
     hr();
     LOG(INFO, "Total decoded: " << values.size());
+}
+
+static void print_folder_summary_table(const std::vector<AggregatePassStats>& agg,
+                                       int imageCount,
+                                       long long totalDecoded)
+{
+    LOG(INFO, "\n======================================== FOLDER SUMMARY ========================================");
+    LOG(INFO, "Images processed: " << imageCount);
+    LOG(INFO, "Total decoded across folder: " << totalDecoded);
+
+    if (agg.empty()) {
+        LOG(INFO, "No pass statistics available.");
+        return;
+    }
+
+    size_t nameW = 9; // "Pass Name"
+    for (const auto& a : agg)
+        nameW = std::max(nameW, a.name.size());
+    nameW = std::min<size_t>(nameW, 48);
+
+    auto hr = [&]() {
+        std::ostringstream oss;
+        oss << '+' << std::string(nameW + 2, '-')
+            << '+' << std::string(8 + 2, '-')
+            << '+' << std::string(8 + 2, '-')
+            << '+' << std::string(12 + 2, '-')
+            << '+' << std::string(11 + 2, '-')
+            << '+' << std::string(11 + 2, '-') << '+';
+        LOG(INFO, oss.str());
+    };
+
+    hr();
+    {
+        std::ostringstream oss;
+        oss << "| " << std::left << std::setw(static_cast<int>(nameW)) << "Pass Name"
+            << " | " << std::right << std::setw(8) << "RawTot"
+            << " | " << std::right << std::setw(8) << "AddedTot"
+            << " | " << std::right << std::setw(12) << "Avg Time(ms)"
+            << " | " << std::right << std::setw(10) << "Img Contrib"
+            << " | " << std::right << std::setw(11) << "Add/Img"
+            << " |";
+        LOG(INFO, oss.str());
+    }
+    hr();
+
+    for (const auto& a : agg) {
+        std::string n = a.name;
+        if (n.size() > nameW) {
+            if (nameW > 3) n = n.substr(0, nameW - 3) + "...";
+            else n = n.substr(0, nameW);
+        }
+        double addPerImg = imageCount > 0 ? static_cast<double>(a.added) / imageCount : 0.0;
+        double avgTimePerImg = imageCount > 0 ? a.ms / imageCount : 0.0;
+        std::ostringstream oss;
+        oss << "| " << std::left << std::setw(static_cast<int>(nameW)) << n
+            << " | " << std::right << std::setw(8) << a.raw
+            << " | " << std::right << std::setw(8) << a.added
+            << " | " << std::right << std::setw(12) << std::fixed << std::setprecision(2) << avgTimePerImg
+            << " | " << std::right << std::setw(11) << a.imagesContributed
+            << " | " << std::right << std::setw(11) << std::fixed << std::setprecision(2) << addPerImg
+            << " |";
+        LOG(INFO, oss.str());
+    }
+    hr();
 }
 
 static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
@@ -518,6 +596,20 @@ int main(int argc, char** argv) {
     }
 
     if (fs::is_directory(input)) {
+        std::vector<AggregatePassStats> folderAgg;
+        int imageCount = 0;
+        long long totalDecoded = 0;
+
+        auto find_or_add = [&](const std::string& name) -> AggregatePassStats& {
+            for (auto& a : folderAgg) {
+                if (a.name == name)
+                    return a;
+            }
+            folderAgg.push_back(AggregatePassStats{});
+            folderAgg.back().name = name;
+            return folderAgg.back();
+        };
+
         for (const auto& entry : fs::directory_iterator(input)) {
             if (!entry.is_regular_file())
                 continue;
@@ -525,7 +617,34 @@ int main(int argc, char** argv) {
                 continue;
 
             process_image_with_zxing(entry.path(), showWindow);
+            imageCount++;
+
+            // Aggregate per-pass stats from last processed image
+            for (const auto& ps : g_lastPassStats) {
+                auto& a = find_or_add(ps.name);
+                a.raw += ps.raw;
+                a.added += ps.added;
+                a.ms += ps.ms;
+                a.imagesSeen += 1;
+                if (ps.added > 0)
+                    a.imagesContributed += 1;
+            }
+
+            // Approximate total decoded for folder
+            long long perImageAdded = 0;
+            for (const auto& ps : g_lastPassStats)
+                perImageAdded += ps.added;
+            totalDecoded += perImageAdded;
         }
+
+        // sort by usefulness: added desc, then time asc
+        std::sort(folderAgg.begin(), folderAgg.end(), [](const auto& a, const auto& b) {
+            if (a.added != b.added)
+                return a.added > b.added;
+            return a.ms < b.ms;
+        });
+
+        print_folder_summary_table(folderAgg, imageCount, totalDecoded);
         return 0;
     }
 
