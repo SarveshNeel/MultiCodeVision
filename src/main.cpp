@@ -19,6 +19,8 @@
 
 namespace fs = std::filesystem;
 
+bool showWindow = true;
+
 enum LogLevel {
     ERROR,
     INFO,
@@ -331,7 +333,7 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
     }
 
     // PASS SUMMARY (boxed table)
-    {
+    auto print_pass_summary = [&]() {
         size_t nameW = 9; // "Pass Name"
         for (const auto& s : passStats)
             nameW = std::max(nameW, s.name.size());
@@ -374,8 +376,13 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
             LOG(INFO, oss.str());
         }
         hr();
-        LOG(INFO, "Total unique decoded: " << results.size());
+    };
+
+    if(showWindow){
+        print_pass_summary();
     }
+
+    LOG(INFO, "Total unique QRs decoded: " << results.size());
 
     g_lastPassStats = passStats;
 
@@ -384,6 +391,10 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
 
 static void print_results_table(const std::vector<QRResult>& results)
 {
+    if(showWindow == false){
+        return;
+    }
+
     if (results.empty()) {
         LOG(INFO, "[RESULTS] No decoded QR strings.");
         return;
@@ -502,7 +513,7 @@ static void print_folder_summary_table(const std::vector<AggregatePassStats>& ag
             << " | " << std::right << std::setw(8) << a.raw
             << " | " << std::right << std::setw(8) << a.added
             << " | " << std::right << std::setw(12) << std::fixed << std::setprecision(2) << avgTimePerImg
-            << " | " << std::right << std::setw(11) << a.imagesContributed
+            << " | " << std::right << std::setw(9) << a.imagesContributed << "/" << imageCount
             << " | " << std::right << std::setw(11) << std::fixed << std::setprecision(2) << addPerImg
             << " |";
         LOG(INFO, oss.str());
@@ -510,7 +521,7 @@ static void print_folder_summary_table(const std::vector<AggregatePassStats>& ag
     hr();
 }
 
-static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
+static void process_image_with_zxing(const fs::path& imagePath)
 {
     cv::Mat img = cv::imread(imagePath.string(), cv::IMREAD_COLOR);
     if (img.empty()) {
@@ -531,10 +542,6 @@ static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
         // std::cout << "No QR codes detected." << std::endl;
     } else {
         for (size_t i = 0; i < results.size(); ++i) {
-            if(showWindow)
-            {
-                // std::cout << "QR " << i << ": " << results[i].text << std::endl;
-            }
 
             std::vector<cv::Point> poly;
             for (const auto& p : results[i].corners)
@@ -555,7 +562,7 @@ static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
         // std::cout << std::endl << "Total QR codes detected: " << results.size() << std::endl << std::endl;
     }
 
-    std::cout << "Detection & Decode Time: " << decode_ms << " ms" << std::endl << std::endl;
+    std::cout << "Decoding Time: " << decode_ms << " ms" << std::endl << std::endl;
 
     print_results_table(results);
 
@@ -578,7 +585,6 @@ int main(int argc, char** argv) {
 
     fs::path input = argv[1];
 
-    bool showWindow = true;
     if (argc >= 3) {
         std::string opt = argv[2];
         if (opt == "--batch")
@@ -591,7 +597,7 @@ int main(int argc, char** argv) {
     }
 
     if (fs::is_regular_file(input)) {
-        process_image_with_zxing(input, showWindow);
+        process_image_with_zxing(input);
         return 0;
     }
 
@@ -616,7 +622,7 @@ int main(int argc, char** argv) {
             if (!has_image_extension(entry.path()))
                 continue;
 
-            process_image_with_zxing(entry.path(), showWindow);
+            process_image_with_zxing(entry.path());
             imageCount++;
 
             // Aggregate per-pass stats from last processed image
