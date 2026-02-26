@@ -15,6 +15,7 @@
 #include <atomic>
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
 
 namespace fs = std::filesystem;
 
@@ -317,22 +318,118 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
         passStats.push_back(std::move(stats));
     }
 
-    LOG(INFO, "\n[PASS SUMMARY]");
-    LOG(INFO, "-----------------------------------------------");
-    LOG(INFO, "Pass Name                               Raw   Added   Time(ms)");
-    LOG(INFO, "-----------------------------------------------");
-    for (const auto& s : passStats) {
-        std::ostringstream oss;
-        oss << std::left << std::setw(36) << s.name
-            << std::right << std::setw(6) << s.raw
-            << std::setw(8) << s.added
-            << std::setw(11) << std::fixed << std::setprecision(3) << s.ms;
-        LOG(INFO, oss.str());
+    // PASS SUMMARY (boxed table)
+    {
+        size_t nameW = 9; // "Pass Name"
+        for (const auto& s : passStats)
+            nameW = std::max(nameW, s.name.size());
+        nameW = std::min<size_t>(nameW, 48);
+
+        auto hr = [&]() {
+            std::ostringstream oss;
+            oss << '+' << std::string(nameW + 2, '-')
+                << '+' << std::string(6 + 2, '-')
+                << '+' << std::string(8 + 2, '-')
+                << '+' << std::string(10 + 2, '-') << '+';
+            LOG(INFO, oss.str());
+        };
+
+        LOG(INFO, "\n[PASS SUMMARY]");
+        hr();
+        {
+            std::ostringstream oss;
+            oss << "| " << std::left << std::setw(static_cast<int>(nameW)) << "Pass Name"
+                << " | " << std::right << std::setw(6) << "Raw"
+                << " | " << std::right << std::setw(8) << "Added"
+                << " | " << std::right << std::setw(10) << "Time(ms)"
+                << " |";
+            LOG(INFO, oss.str());
+        }
+        hr();
+
+        for (const auto& s : passStats) {
+            std::string n = s.name;
+            if (n.size() > nameW) {
+                if (nameW > 3) n = n.substr(0, nameW - 3) + "...";
+                else n = n.substr(0, nameW);
+            }
+            std::ostringstream oss;
+            oss << "| " << std::left << std::setw(static_cast<int>(nameW)) << n
+                << " | " << std::right << std::setw(6) << s.raw
+                << " | " << std::right << std::setw(8) << s.added
+                << " | " << std::right << std::setw(10) << std::fixed << std::setprecision(3) << s.ms
+                << " |";
+            LOG(INFO, oss.str());
+        }
+        hr();
+        LOG(INFO, "Total unique decoded: " << results.size());
     }
-    LOG(INFO, "-----------------------------------------------");
-    LOG(INFO, "Total unique decoded: " << results.size());
 
     return results;
+}
+
+static void print_results_table(const std::vector<QRResult>& results)
+{
+    if (results.empty()) {
+        LOG(INFO, "[RESULTS] No decoded QR strings.");
+        return;
+    }
+
+    // Copy + sort for stable presentation
+    std::vector<std::string> values;
+    values.reserve(results.size());
+    for (const auto& r : results)
+        values.push_back(r.text);
+    std::sort(values.begin(), values.end());
+
+    // Layout config
+    constexpr size_t kCols = 3; // multi-column output
+    size_t textW = 7; // "Decoded"
+    for (const auto& v : values)
+        textW = std::max(textW, v.size());
+    textW = std::min<size_t>(textW, 32); // keep table compact
+
+    const size_t rows = (values.size() + kCols - 1) / kCols;
+
+    auto hr = [&]() {
+        std::ostringstream oss;
+        for (size_t c = 0; c < kCols; ++c)
+            oss << '+' << std::string(textW + 2, '-');
+        oss << '+';
+        LOG(INFO, oss.str());
+    };
+
+    LOG(INFO, "\n[RESULTS TABLE]");
+    hr();
+    {
+        std::ostringstream oss;
+        for (size_t c = 0; c < kCols; ++c)
+            oss << "| " << std::left << std::setw(static_cast<int>(textW)) << (std::string("Decoded")) << ' ';
+        oss << '|';
+        LOG(INFO, oss.str());
+    }
+    hr();
+
+    for (size_t r = 0; r < rows; ++r) {
+        std::ostringstream oss;
+        for (size_t c = 0; c < kCols; ++c) {
+            const size_t idx = c * rows + r; // column-major fill for compactness
+            std::string cell;
+            if (idx < values.size()) {
+                cell = values[idx];
+                if (cell.size() > textW) {
+                    if (textW > 3) cell = cell.substr(0, textW - 3) + "...";
+                    else cell = cell.substr(0, textW);
+                }
+            }
+            oss << "| " << std::left << std::setw(static_cast<int>(textW)) << cell << ' ';
+        }
+        oss << '|';
+        LOG(INFO, oss.str());
+    }
+
+    hr();
+    LOG(INFO, "Total decoded: " << values.size());
 }
 
 static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
@@ -343,7 +440,7 @@ static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
         return;
     }
 
-    std::cout << "\n======================= " << imagePath.filename().string() << " =======================" << std::endl;
+    std::cout << "\n======================================== " << imagePath.filename().string() << " ========================================" << std::endl;
     using clock = std::chrono::steady_clock;
 
     const auto start_timer = clock::now();
@@ -381,6 +478,8 @@ static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
     }
 
     std::cout << "Detection & Decode Time: " << decode_ms << " ms" << std::endl << std::endl;
+
+    print_results_table(results);
 
     if (showWindow) {
         cv::imshow("QR Decode - " + imagePath.filename().string(), img);
