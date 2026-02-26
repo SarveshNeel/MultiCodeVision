@@ -21,6 +21,13 @@ struct QRResult {
     std::vector<cv::Point2f> corners;
 };
 
+// preprocessing + multi-scale passes
+struct ZXPass {
+    cv::Mat img;
+    // Factor to convert coordinates from this pass back to the original image
+    float coordScale;
+};
+
 static ZXing::ImageView to_zxing_imageview(const cv::Mat& img, cv::Mat& gray_out)
 {
     if (img.channels() == 3)
@@ -99,7 +106,7 @@ static bool has_image_extension(const fs::path& p) {
 
 // ZXing-based detector/decoder.
 // More robust than OpenCV detectMulti() for small and rotated QR codes.
-std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
+std::vector<QRResult> detect_and_decode(const cv::Mat& img)
 {
     std::vector<QRResult> results;
 
@@ -123,15 +130,13 @@ std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
     else
         gray = img;
 
-    // preprocessing + multi-scale passes
-    struct ZXPass {
-        cv::Mat img;
-        // Factor to convert coordinates from this pass back to the original image
-        float coordScale;
-    };
-
     std::vector<ZXPass> passes;
     passes.push_back({gray, 1.0f});
+
+    // cv::Mat sharpened;
+    // cv::GaussianBlur(gray, sharpened, cv::Size(0, 0), 1.0);
+    // cv::addWeighted(gray, 1.5, sharpened, -0.5, 0, sharpened);
+    // passes.push_back({sharpened, 1.0f});
 
     // CLAHE (VERY important for shiny cans)
     cv::Mat claheImg;
@@ -149,13 +154,31 @@ std::vector<QRResult> detect_and_decode_parallel(const cv::Mat& img)
     passes.push_back({bw, 1.0f});
 
     // Upscaled CLAHE pass to help with very small / distant QRs
-    {
-        cv::Mat srcForUpscale = claheImg.empty() ? gray : claheImg;
-        cv::Mat upScaled;
-        double upscale = 2.0;
-        cv::resize(srcForUpscale, upScaled, cv::Size(), upscale, upscale, cv::INTER_CUBIC);
-        // Coordinates from this pass need to be scaled back down
-        passes.push_back({upScaled, static_cast<float>(1.0 / upscale)});
+    // {
+    //     cv::Mat srcForUpscale = claheImg.empty() ? gray : claheImg;
+    //     cv::Mat upScaled;
+    //     double upscale = 2.0;
+    //     cv::resize(srcForUpscale, upScaled, cv::Size(), upscale, upscale, cv::INTER_CUBIC);
+    //     // Coordinates from this pass need to be scaled back down
+    //     passes.push_back({upScaled, static_cast<float>(1.0 / upscale)});
+    // }
+
+    // build a scale pyramid instead of just one upscaled pass, to better handle a range of small QR sizes
+    std::vector<float> scales = {1.5f, 3.0f};
+    cv::Mat baseImage = gray;  // use gray as base
+
+    for (float scale : scales) {
+        cv::Mat scaled;
+        cv::resize(baseImage, scaled, cv::Size(), scale, scale, cv::INTER_CUBIC);
+        passes.push_back({scaled, 1.0f / scale});
+    }
+
+    scales = {4.0f};
+    baseImage = claheImg; // use CLAHE as base for more aggressive upscaling (helps with very small/distant QRs, especially on shiny cans)
+    for (float scale : scales) {
+        cv::Mat scaled;
+        cv::resize(baseImage, scaled, cv::Size(), scale, scale, cv::INTER_CUBIC);
+        passes.push_back({scaled, 1.0f / scale});
     }
 
     auto center_of = [](const QRResult& q) {
@@ -248,7 +271,7 @@ static void process_image_with_zxing(const fs::path& imagePath, bool showWindow)
 
     using clock = std::chrono::steady_clock;
     const auto t0 = clock::now();
-    auto results = detect_and_decode_parallel(img);
+    auto results = detect_and_decode(img);
     const auto t1 = clock::now();
     const auto decode_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
