@@ -30,8 +30,23 @@ enum LogLevel {
 
 static LogLevel LOG_LEVEL = INFO;
 
+
 #define LOG(level, msg) \
     do { if ((level) <= LOG_LEVEL) { std::cout << msg << std::endl; } } while (0)
+
+// Helper: Print section header for console output
+static void print_section_header(const std::string& title)
+{
+    const int width = 100;
+    std::string line(width, '=');
+    LOG(INFO, "\n" << line);
+    int pad = (width - static_cast<int>(title.size()) - 2);
+    if (pad < 0) pad = 0;
+    int left = pad / 2;
+    int right = pad - left;
+    LOG(INFO, std::string(left, ' ') << "[" << title << "]" << std::string(right, ' '));
+    LOG(INFO, line);
+}
 
 struct QRResult {
     std::string text;
@@ -348,7 +363,7 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
             LOG(INFO, oss.str());
         };
 
-        LOG(INFO, "\n[PASS SUMMARY]");
+        print_section_header("PASS SUMMARY");
         hr();
         {
             std::ostringstream oss;
@@ -372,6 +387,24 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
                 << " | " << std::right << std::setw(6) << s.raw
                 << " | " << std::right << std::setw(8) << s.added
                 << " | " << std::right << std::setw(10) << std::fixed << std::setprecision(3) << s.ms
+                << " |";
+            LOG(INFO, oss.str());
+        }
+        hr();
+        int totalRaw = 0;
+        int totalAdded = 0;
+        double totalMs = 0.0;
+        for (const auto& s : passStats) {
+            totalRaw += s.raw;
+            totalAdded += s.added;
+            totalMs += s.ms;
+        }
+        {
+            std::ostringstream oss;
+            oss << "| " << std::left << std::setw(static_cast<int>(nameW)) << "TOTAL"
+                << " | " << std::right << std::setw(6) << totalRaw
+                << " | " << std::right << std::setw(8) << totalAdded
+                << " | " << std::right << std::setw(10) << std::fixed << std::setprecision(3) << totalMs
                 << " |";
             LOG(INFO, oss.str());
         }
@@ -408,7 +441,7 @@ static void print_results_table(const std::vector<QRResult>& results)
     size_t textW = 7; // "Decoded"
     for (const auto& v : values)
         textW = std::max(textW, v.size());
-    textW = std::min<size_t>(textW, 32); // keep table compact
+    textW = std::min<size_t>(textW + 4, 40); // allow room for numbering
 
     const size_t rows = (values.size() + kCols - 1) / kCols;
 
@@ -420,12 +453,12 @@ static void print_results_table(const std::vector<QRResult>& results)
         LOG(INFO, oss.str());
     };
 
-    LOG(INFO, "\n[RESULTS TABLE]");
+    print_section_header("RESULTS TABLE");
     hr();
     {
         std::ostringstream oss;
         for (size_t c = 0; c < kCols; ++c)
-            oss << "| " << std::left << std::setw(static_cast<int>(textW)) << (std::string("Decoded")) << ' ';
+            oss << "| " << std::left << std::setw(static_cast<int>(textW)) << (std::string("Decoded #") + std::to_string(c+1)) << ' ';
         oss << '|';
         LOG(INFO, oss.str());
     }
@@ -437,7 +470,7 @@ static void print_results_table(const std::vector<QRResult>& results)
             const size_t idx = c * rows + r; // column-major fill for compactness
             std::string cell;
             if (idx < values.size()) {
-                cell = values[idx];
+                cell = std::to_string(idx) + ": " + values[idx];
                 if (cell.size() > textW) {
                     if (textW > 3) cell = cell.substr(0, textW - 3) + "...";
                     else cell = cell.substr(0, textW);
@@ -459,9 +492,9 @@ static void print_folder_summary_table(const std::vector<AggregatePassStats>& ag
                                        double totalDecodingTime,
                                        double totalPassTime)
 {
-    LOG(INFO, "\n======================================== FOLDER SUMMARY ========================================");
-    LOG(INFO, "Images processed: " << imageCount);
-    LOG(INFO, "Total QRs decoded across folder: " << totalDecoded);
+    print_section_header("FOLDER SUMMARY");
+    LOG(INFO, "Images processed              : " << imageCount);
+    LOG(INFO, "Total QRs decoded (aggregate): " << totalDecoded);
 
     if (agg.empty()) {
         LOG(INFO, "No pass statistics available.");
@@ -519,13 +552,13 @@ static void print_folder_summary_table(const std::vector<AggregatePassStats>& ag
     hr();
 
     double avgDecodingTimePerImage = imageCount > 0 ? totalDecodingTime / imageCount : 0.0;
-    LOG(INFO, "Avg Time for Complete Decoding per Image: " << avgDecodingTimePerImage << " ms" << std::endl);
+    LOG(INFO, "Avg Time for Complete Decoding per Image : " << avgDecodingTimePerImage << " ms" << std::endl);
 
     double avgPassTimePerImage = imageCount > 0 ? totalPassTime / imageCount : 0.0;
-    LOG(INFO, "Avg Time for Processing all Passes per Image: " << avgPassTimePerImage << " ms" << std::endl);
+    LOG(INFO, "Avg Time for Processing all Passes per Image : " << avgPassTimePerImage << " ms" << std::endl);
 
     double avgTimeToApplyPass = avgDecodingTimePerImage - avgPassTimePerImage;
-    LOG(INFO, "Avg Time to Apply all Passes per Image: " << avgTimeToApplyPass << " ms" << std::endl);
+    LOG(INFO, "Avg Time to Apply all Passes per Image   : " << avgTimeToApplyPass << " ms" << std::endl);
 }
 
 static double process_image_with_zxing(const fs::path& imagePath)
@@ -538,7 +571,7 @@ static double process_image_with_zxing(const fs::path& imagePath)
         return decode_ms;
     }
 
-    std::cout << "\n======================================== " << imagePath.filename().string() << " ========================================" << std::endl;
+    print_section_header(std::string("IMAGE: ") + imagePath.filename().string());
     using clock = std::chrono::steady_clock;
 
     const auto start_timer = clock::now();
@@ -566,7 +599,7 @@ static double process_image_with_zxing(const fs::path& imagePath)
             cv::LINE_AA);
     }
 
-    std::cout << "Decoding Time: " << decode_ms << " ms" << std::endl << std::endl;
+    LOG(INFO, "Decoding Time (total)        : " << std::fixed << std::setprecision(3) << decode_ms << " ms");
 
     if (showWindow) {
         print_results_table(results);
