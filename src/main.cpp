@@ -48,6 +48,11 @@ void print_section_header(const std::string& title)
     LOG(INFO, line);
 }
 
+struct ImageResultData {
+    double decode_ms = 0.0;
+    long long decodedCnt = 0;
+};
+
 struct QRResult {
     std::string text;
     std::vector<cv::Point2f> corners;
@@ -487,13 +492,13 @@ void print_results_table(const std::vector<QRResult>& results)
 
 void print_folder_summary_table(const std::vector<AggregatePassStats>& agg,
                                        int imageCount,
-                                       long long totalDecoded,
+                                       long long totalDecodedCnt,
                                        double totalDecodingTime,
                                        double totalPassTime)
 {
     print_section_header("FOLDER SUMMARY");
     LOG(INFO, "Images processed              : " << imageCount);
-    LOG(INFO, "Total QRs decoded (aggregate): " << totalDecoded);
+    LOG(INFO, "Total QRs decoded (aggregate): " << totalDecodedCnt);
 
     if (agg.empty()) {
         LOG(INFO, "No pass statistics available.");
@@ -560,14 +565,14 @@ void print_folder_summary_table(const std::vector<AggregatePassStats>& agg,
     LOG(INFO, "Avg Time to Apply all Passes per Image   : " << avgTimeToApplyPass << " ms" << std::endl);
 }
 
-double process_image_with_zxing(const fs::path& imagePath)
+ImageResultData process_image_with_zxing(const fs::path& imagePath)
 {
-    double decode_ms = 0.0;
+    ImageResultData resultData;
 
     cv::Mat img = cv::imread(imagePath.string(), cv::IMREAD_COLOR);
     if (img.empty()) {
         std::cerr << "[ERROR] Failed to load image: " << imagePath << std::endl;
-        return decode_ms;
+        return resultData;
     }
 
     print_section_header(std::string("IMAGE: ") + imagePath.filename().string());
@@ -577,7 +582,8 @@ double process_image_with_zxing(const fs::path& imagePath)
     auto results = detect_and_decode(img);
     const auto end_timer = clock::now();
 
-    decode_ms = elapsed_ms(start_timer, end_timer);
+    resultData.decode_ms = elapsed_ms(start_timer, end_timer);
+    resultData.decodedCnt = (long long) results.size();
 
     for (size_t i = 0; i < results.size(); ++i) {
 
@@ -598,7 +604,7 @@ double process_image_with_zxing(const fs::path& imagePath)
             cv::LINE_AA);
     }
 
-    LOG(INFO, "Decoding Time (total)        : " << std::fixed << std::setprecision(3) << decode_ms << " ms");
+    LOG(INFO, "Decoding Time (total)        : " << std::fixed << std::setprecision(3) << resultData.decode_ms << " ms");
 
     if (showWindow) {
         print_results_table(results);
@@ -610,7 +616,7 @@ double process_image_with_zxing(const fs::path& imagePath)
         cv::destroyAllWindows();
     }
 
-    return decode_ms;
+    return resultData;
 }
 
 int main(int argc, char** argv) {
@@ -644,7 +650,7 @@ int main(int argc, char** argv) {
     if (fs::is_directory(input)) {
         std::vector<AggregatePassStats> folderAgg;
         int imageCount = 0;
-        long long totalDecoded = 0;
+        long long totalDecodedCnt = 0;
 
         auto find_or_add = [&](const std::string& name) -> AggregatePassStats& {
             for (auto& a : folderAgg) {
@@ -664,7 +670,10 @@ int main(int argc, char** argv) {
             if (!has_image_extension(entry.path()))
                 continue;
 
-            totalDecodingTime += process_image_with_zxing(entry.path());
+            ImageResultData resultData = process_image_with_zxing(entry.path());
+            totalDecodingTime += resultData.decode_ms;
+            totalDecodedCnt += resultData.decodedCnt;
+
             imageCount++;
 
             // Aggregate per-pass stats from last processed image
@@ -676,12 +685,6 @@ int main(int argc, char** argv) {
                 if (ps.added > 0)
                     a.imagesContributed += 1;
             }
-
-            // Approximate total decoded for folder
-            long long perImageAdded = 0;
-            for (const auto& ps : g_lastPassStats)
-                perImageAdded += ps.added;
-            totalDecoded += perImageAdded;
 
             //Calculate total time spent for processing all passes across the folder
             for(const auto& ps : g_lastPassStats) {
@@ -696,7 +699,7 @@ int main(int argc, char** argv) {
             return a.ms < b.ms;
         });
 
-        print_folder_summary_table(folderAgg, imageCount, totalDecoded, totalDecodingTime, totalPassTime);
+        print_folder_summary_table(folderAgg, imageCount, totalDecodedCnt, totalDecodingTime, totalPassTime);
         return 0;
     }
 
