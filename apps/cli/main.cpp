@@ -1,38 +1,10 @@
-#include <opencv2/opencv.hpp>
-#include <opencv2/objdetect.hpp>
-
-#include <ZXing/ReadBarcode.h>
-#include <ZXing/BarcodeFormat.h>
-#include <ZXing/ReaderOptions.h>
-#include <ZXing/ImageView.h>
-
-#include <filesystem>
-#include <iostream>
-#include <string>
-#include <vector>
-#include <chrono>
-#include <thread>
-#include <atomic>
-#include <iomanip>
-#include <sstream>
-#include <algorithm>
-
-namespace fs = std::filesystem;
+#include <mcv/g_struct.h>
+#include <mcv/decode/zxing.h>
 
 bool showWindow = true;
 
-enum LogLevel {
-    ERROR,
-    INFO,
-    DEBUG,
-    TRACE
-};
-
-LogLevel LOG_LEVEL = INFO;
-
-
-#define LOG(level, msg) \
-    do { if ((level) <= LOG_LEVEL) { std::cout << msg << std::endl; } } while (0)
+// Global storage for last-run pass stats for aggregation
+std::vector<PassStats> g_lastPassStats;
 
 // Helper: Print section header for console output
 void print_section_header(const std::string& title)
@@ -48,60 +20,11 @@ void print_section_header(const std::string& title)
     LOG(INFO, line);
 }
 
-struct ImageResultData {
-    double decode_ms = 0.0;
-    long long decodedCnt = 0;
-};
-
-struct QRResult {
-    std::string text;
-    std::vector<cv::Point2f> corners;
-};
-
-// preprocessing + multi-scale passes
-struct ZXPass {
-    cv::Mat img;
-    float coordScale; // Factor to convert coordinates from this pass back to the original image
-    std::string type; // for debugging
-};
-
-struct PassStats {
-    std::string name;
-    int raw = 0;      // raw ZXing results in this pass
-    int added = 0;    // unique results added after dedup
-    double ms = 0.0;  // elapsed time for this pass
-};
-
-struct AggregatePassStats {
-    std::string name;
-    long long raw = 0;
-    long long added = 0;
-    double ms = 0.0;
-    int imagesContributed = 0; // images where this pass added >=1
-};
-
-struct ScopedTimer {
-    std::string name;
-    std::chrono::steady_clock::time_point start;
-
-    ScopedTimer(const std::string &n) : name(n), start(std::chrono::steady_clock::now()) {}
-
-    ~ScopedTimer() {
-        auto end = std::chrono::steady_clock::now();
-        double ms = std::chrono::duration<double, std::milli>(end - start).count();
-
-        LOG(DEBUG, "[TIME] " << name << ": " << ms << " ms");
-    }
-};
-
 inline double elapsed_ms(const std::chrono::steady_clock::time_point& a,
                                 const std::chrono::steady_clock::time_point& b)
 {
     return std::chrono::duration<double, std::milli>(b - a).count();
 }
-
-// Global storage for last-run pass stats for aggregation
-std::vector<PassStats> g_lastPassStats;
 
 // Helper to format float nicely
 std::string format_scale(float s) {
