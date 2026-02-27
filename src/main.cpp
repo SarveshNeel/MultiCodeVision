@@ -28,14 +28,14 @@ enum LogLevel {
     TRACE
 };
 
-static LogLevel LOG_LEVEL = INFO;
+LogLevel LOG_LEVEL = INFO;
 
 
 #define LOG(level, msg) \
     do { if ((level) <= LOG_LEVEL) { std::cout << msg << std::endl; } } while (0)
 
 // Helper: Print section header for console output
-static void print_section_header(const std::string& title)
+void print_section_header(const std::string& title)
 {
     const int width = 100;
     std::string line(width, '=');
@@ -72,7 +72,6 @@ struct AggregatePassStats {
     long long raw = 0;
     long long added = 0;
     double ms = 0.0;
-    int imagesSeen = 0;
     int imagesContributed = 0; // images where this pass added >=1
 };
 
@@ -90,14 +89,14 @@ struct ScopedTimer {
     }
 };
 
-static inline double elapsed_ms(const std::chrono::steady_clock::time_point& a,
+inline double elapsed_ms(const std::chrono::steady_clock::time_point& a,
                                 const std::chrono::steady_clock::time_point& b)
 {
     return std::chrono::duration<double, std::milli>(b - a).count();
 }
 
 // Global storage for last-run pass stats for aggregation
-static std::vector<PassStats> g_lastPassStats;
+std::vector<PassStats> g_lastPassStats;
 
 // Helper to format float nicely
 std::string format_scale(float s) {
@@ -106,7 +105,7 @@ std::string format_scale(float s) {
     return oss.str();
 }
 
-static ZXing::ImageView to_zxing_imageview(const cv::Mat& img, cv::Mat& gray_out)
+ZXing::ImageView to_zxing_imageview(const cv::Mat& img, cv::Mat& gray_out)
 {
     if (img.channels() == 3)
         cv::cvtColor(img, gray_out, cv::COLOR_BGR2GRAY);
@@ -116,7 +115,7 @@ static ZXing::ImageView to_zxing_imageview(const cv::Mat& img, cv::Mat& gray_out
     return ZXing::ImageView(gray_out.data, gray_out.cols, gray_out.rows, ZXing::ImageFormat::Lum);
 }
 
-static cv::Mat warp_qr_patch(const cv::Mat& img, const std::vector<cv::Point2f>& corners, int out_size = 256)
+cv::Mat warp_qr_patch(const cv::Mat& img, const std::vector<cv::Point2f>& corners, int out_size = 256)
 {
     if (corners.size() != 4) return cv::Mat();
 
@@ -134,7 +133,7 @@ static cv::Mat warp_qr_patch(const cv::Mat& img, const std::vector<cv::Point2f>&
     return warped;
 }
 
-static std::string decode_with_fallback(const cv::Mat& full_img,
+std::string decode_with_fallback(const cv::Mat& full_img,
                                         const std::vector<cv::Point2f>& corners)
 {
     // 1) Fast path: padded ROI decode
@@ -173,7 +172,7 @@ static std::string decode_with_fallback(const cv::Mat& full_img,
     return std::string();
 }
 
-static bool has_image_extension(const fs::path& p) {
+bool has_image_extension(const fs::path& p) {
     const std::string ext = p.extension().string();
     if (ext.empty()) return false;
     std::string e;
@@ -422,7 +421,7 @@ std::vector<QRResult> detect_and_decode(const cv::Mat& img)
     return results;
 }
 
-static void print_results_table(const std::vector<QRResult>& results)
+void print_results_table(const std::vector<QRResult>& results)
 {
     if (results.empty()) {
         LOG(INFO, "[RESULTS] No decoded QR strings.");
@@ -486,7 +485,7 @@ static void print_results_table(const std::vector<QRResult>& results)
     LOG(INFO, "Total decoded: " << values.size());
 }
 
-static void print_folder_summary_table(const std::vector<AggregatePassStats>& agg,
+void print_folder_summary_table(const std::vector<AggregatePassStats>& agg,
                                        int imageCount,
                                        long long totalDecoded,
                                        double totalDecodingTime,
@@ -561,7 +560,7 @@ static void print_folder_summary_table(const std::vector<AggregatePassStats>& ag
     LOG(INFO, "Avg Time to Apply all Passes per Image   : " << avgTimeToApplyPass << " ms" << std::endl);
 }
 
-static double process_image_with_zxing(const fs::path& imagePath)
+double process_image_with_zxing(const fs::path& imagePath)
 {
     double decode_ms = 0.0;
 
@@ -617,8 +616,8 @@ static double process_image_with_zxing(const fs::path& imagePath)
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cout << "Usage:\n"
-                  << "  ./app <image_path> [--batch]\n"
-                  << "  ./app <directory_path> [--batch]\n"
+                  << "  .build/app <image_path> [--batch]\n"
+                  << "  .build/app <directory_path> [--batch]\n"
                   << "\nOptions:\n"
                   << "  --batch   Process without opening preview windows\n";
         return 1;
@@ -674,7 +673,6 @@ int main(int argc, char** argv) {
                 a.raw += ps.raw;
                 a.added += ps.added;
                 a.ms += ps.ms;
-                a.imagesSeen += 1;
                 if (ps.added > 0)
                     a.imagesContributed += 1;
             }
