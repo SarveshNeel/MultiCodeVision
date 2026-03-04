@@ -24,8 +24,11 @@ BUILD_DIR := build
 TARGET := $(BUILD_DIR)/app
 
 # ===== Source files =====
-SRCS := $(shell find $(SRC_DIR) -name '*.cpp')
-OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS))
+LIB_SRCS := $(shell find src -name '*.cpp')
+APP_SRCS := $(shell find apps -name '*.cpp')
+
+SRCS := $(LIB_SRCS) $(APP_SRCS)
+OBJS := $(SRCS:%.cpp=$(BUILD_DIR)/%.o)
 
 # ===== Include flags =====
 INCLUDES := -I$(INC_DIR) $(OPENCV_CFLAGS) $(ZXING_CFLAGS)
@@ -39,7 +42,7 @@ $(TARGET): $(OBJS)
 	$(CXX) $(OBJS) $(OPENCV_LIBS) $(ZXING_LIBS) -o $@
 
 # ===== Compile step =====
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
+$(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
