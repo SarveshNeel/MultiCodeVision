@@ -24,6 +24,44 @@ from pathlib import Path
 from datetime import datetime
 
 # -------------------------------------------------
+# Read pipeline configuration
+# -------------------------------------------------
+
+def read_config_file() -> str:
+
+    repo_root = Path(__file__).resolve().parents[1]
+    config_path = repo_root / "include" / "mcv" / "core" / "config.hpp"
+
+    if not config_path.exists():
+        return "[CONFIG] config.hpp not found\n"
+
+    variables = []
+
+    inside_block = False
+
+    with open(config_path, "r") as f:
+        for line in f:
+            stripped = line.strip()
+
+            # Detect start of struct/enum/class blocks
+            if stripped.startswith("struct ") or stripped.startswith("enum ") or stripped.startswith("class "):
+                inside_block = True
+
+            if inside_block:
+                if "};" in stripped or "}" in stripped:
+                    inside_block = False
+                continue
+
+            # Capture only initialized variables
+            if "=" in stripped and stripped.endswith(";"):
+                variables.append(stripped)
+
+    header = "\n================ CONFIGURATION VARIABLES ================\n"
+    footer = "\n========================================================\n\n"
+
+    return header + "\n".join(variables) + footer
+
+# -------------------------------------------------
 # Run decoder
 # -------------------------------------------------
 
@@ -67,6 +105,8 @@ def main():
 
     output = run_app_batch(app_path, image_dir)
 
+    config_text = read_config_file()
+
     console_outputs = [output]
 
     # -----------------------------
@@ -75,6 +115,10 @@ def main():
 
     with open(console_report_path, "w") as f:
 
+        # Write configuration used for the experiment
+        f.write(config_text)
+
+        # Write console output from decoder
         for block in console_outputs:
             f.write(block)
 
