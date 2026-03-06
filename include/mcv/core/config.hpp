@@ -12,11 +12,18 @@ const int ZXING_MAX_SYMBOLS = 40;
 
 //------------------------------------------------Image Preprocessing
 
-enum BaseImage {
+enum BaseImage 
+{
     GRAY,
     ADAPTIVE_THRESHOLD,
     CLAHE,
     UPSCALE
+};
+
+struct PreprocessPassConfig 
+{
+    std::vector<BaseImage> ops;
+    float scale = 1.0f;
 };
 
 //------------ADAPTIVE THRESHOLD---------------
@@ -26,11 +33,6 @@ const int ADAPTIVE_C = 3;
 //------------------CLAHE----------------------
 const double CLAHE_CLIP_LIMIT = 2.5;
 const int CLAHE_TILE_SIZE = 8;
-
-struct PreprocessPassConfig {
-    std::vector<BaseImage> ops;
-    float scale = 1.0f;
-};
 
 inline std::vector<PreprocessPassConfig> PREPROCESS_PIPELINE = {
     // baseline

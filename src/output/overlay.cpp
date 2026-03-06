@@ -1,8 +1,9 @@
 #include <mcv/output/overlay.hpp>
 
-void draw_overlay(const cv::Mat& img, std::vector<QRResult> &results){
-    for (size_t i = 0; i < results.size(); ++i) {
-
+void draw_overlay(const cv::Mat& img, std::vector<QRResult> &results)
+{
+    for (size_t i = 0; i < results.size(); ++i) 
+    {
         std::vector<cv::Point> poly;
         for (const auto& p : results[i].corners)
             poly.emplace_back(cvRound(p.x), cvRound(p.y));

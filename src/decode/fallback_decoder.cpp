@@ -15,7 +15,8 @@ std::string decode_with_fallback(const cv::Mat& full_img,
     roi.width += 2 * pad; roi.height += 2 * pad;
     roi &= cv::Rect(0, 0, full_img.cols, full_img.rows);
 
-    if (roi.width > 0 && roi.height > 0) {
+    if (roi.width > 0 && roi.height > 0) 
+    {
         cv::Mat crop = full_img(roi).clone();
         cv::QRCodeDetector d;
         std::string txt = d.detectAndDecode(crop);
@@ -24,14 +25,16 @@ std::string decode_with_fallback(const cv::Mat& full_img,
 
     // 2) Robust path: perspective-normalized patch
     cv::Mat warped = warp_qr_patch(full_img, corners, 320);
-    if (!warped.empty()) {
+    if (!warped.empty()) 
+    {
         cv::QRCodeDetector d;
         std::string txt = d.detectAndDecode(warped);
         if (!txt.empty()) return txt;
     }
 
     // 3) Last try: grayscale + threshold on warped patch
-    if (!warped.empty()) {
+    if (!warped.empty()) 
+    {
         cv::Mat gray, bw;
         cv::cvtColor(warped, gray, cv::COLOR_BGR2GRAY);
         cv::adaptiveThreshold(gray, bw, 255, cv::ADAPTIVE_THRESH_GAUSSIAN_C,

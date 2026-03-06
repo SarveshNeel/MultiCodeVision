@@ -8,21 +8,23 @@
 #include <mcv/core/GlobalVariables.hpp>
 
 // Helper to format float nicely
-std::string format_scale(float s) {
+std::string format_scale(float s) 
+{
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(1) << s;
     return oss.str();
 }
 
 // PASS SUMMARY (boxed table)
-void print_pass_summary(){
-    
+void print_pass_summary()
+{    
     size_t nameW = 9; // "Pass Name"
     for (const auto& s : g_passStats)
         nameW = std::max(nameW, s.name.size());
     nameW = std::min<size_t>(nameW, 48);
 
-    auto hr = [&]() {
+    auto hr = [&]() 
+    {
         std::ostringstream oss;
         oss << '+' << std::string(nameW + 2, '-')
             << '+' << std::string(6 + 2, '-')
@@ -44,9 +46,11 @@ void print_pass_summary(){
     }
     hr();
 
-    for (const auto& s : g_passStats) {
+    for (const auto& s : g_passStats) 
+    {
         std::string n = s.name;
-        if (n.size() > nameW) {
+        if (n.size() > nameW)
+        {
             if (nameW > 3) n = n.substr(0, nameW - 3) + "...";
             else n = n.substr(0, nameW);
         }
@@ -62,7 +66,8 @@ void print_pass_summary(){
     int totalRaw = 0;
     int totalAdded = 0;
     double totalMs = 0.0;
-    for (const auto& s : g_passStats) {
+    for (const auto& s : g_passStats) 
+    {
         totalRaw += s.raw;
         totalAdded += s.added;
         totalMs += s.ms;
@@ -95,7 +100,8 @@ void print_section_header(const std::string& title)
 
 void print_results_table(const std::vector<QRResult>& results)
 {
-    if (results.empty()) {
+    if (results.empty()) 
+    {
         LOG(INFO, "[RESULTS] No decoded QR strings.");
         return;
     }
@@ -116,7 +122,8 @@ void print_results_table(const std::vector<QRResult>& results)
 
     const size_t rows = (values.size() + kCols - 1) / kCols;
 
-    auto hr = [&]() {
+    auto hr = [&]() 
+    {
         std::ostringstream oss;
         for (size_t c = 0; c < kCols; ++c)
             oss << '+' << std::string(textW + 2, '-');
@@ -135,14 +142,18 @@ void print_results_table(const std::vector<QRResult>& results)
     }
     hr();
 
-    for (size_t r = 0; r < rows; ++r) {
+    for (size_t r = 0; r < rows; ++r) 
+    {
         std::ostringstream oss;
-        for (size_t c = 0; c < kCols; ++c) {
+        for (size_t c = 0; c < kCols; ++c) 
+        {
             const size_t idx = c * rows + r; // column-major fill for compactness
             std::string cell;
-            if (idx < values.size()) {
+            if (idx < values.size()) 
+            {
                 cell = std::to_string(idx) + ": " + values[idx];
-                if (cell.size() > textW) {
+                if (cell.size() > textW) 
+                {
                     if (textW > 3) cell = cell.substr(0, textW - 3) + "...";
                     else cell = cell.substr(0, textW);
                 }
@@ -165,7 +176,8 @@ void print_folder_summary_table(std::vector<AggregatePassStats>& agg,
 {
 
     // sort by usefulness: added desc, then time asc
-    std::sort(agg.begin(), agg.end(), [](const auto& a, const auto& b) {
+    std::sort(agg.begin(), agg.end(), [](const auto& a, const auto& b) 
+    {
         if (a.added != b.added)
             return a.added > b.added;
         return a.ms < b.ms;
@@ -175,7 +187,8 @@ void print_folder_summary_table(std::vector<AggregatePassStats>& agg,
     LOG(INFO, "Images processed              : " << imageCount);
     LOG(INFO, "Total QRs decoded (aggregate): " << totalDecodedCnt);
 
-    if (agg.empty()) {
+    if (agg.empty()) 
+    {
         LOG(INFO, "No pass statistics available.");
         return;
     }
@@ -183,9 +196,11 @@ void print_folder_summary_table(std::vector<AggregatePassStats>& agg,
     size_t nameW = 9; // "Pass Name"
     for (const auto& a : agg)
         nameW = std::max(nameW, a.name.size());
+
     nameW = std::min<size_t>(nameW, 48);
 
-    auto hr = [&]() {
+    auto hr = [&]() 
+    {
         std::ostringstream oss;
         oss << '+' << std::string(nameW + 2, '-')
             << '+' << std::string(8 + 2, '-')
@@ -210,9 +225,11 @@ void print_folder_summary_table(std::vector<AggregatePassStats>& agg,
     }
     hr();
 
-    for (const auto& a : agg) {
+    for (const auto& a : agg) 
+    {
         std::string n = a.name;
-        if (n.size() > nameW) {
+        if (n.size() > nameW) 
+        {
             if (nameW > 3) n = n.substr(0, nameW - 3) + "...";
             else n = n.substr(0, nameW);
         }

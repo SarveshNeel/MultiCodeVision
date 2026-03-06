@@ -4,7 +4,8 @@
 
 namespace fs = std::filesystem;
 
-bool has_image_extension(const fs::path& p) {
+bool has_image_extension(const fs::path& p) 
+{
     const std::string ext = p.extension().string();
     if (ext.empty()) return false;
     std::string e;

@@ -14,19 +14,18 @@ ZXing::ImageView to_zxing_imageview(const cv::Mat& img, cv::Mat& gray_out)
     return ZXing::ImageView(gray_out.data, gray_out.cols, gray_out.rows, ZXing::ImageFormat::Lum);
 }
 
-void configure_zxing_decoder(){
-
+void configure_zxing_decoder()
+{
     hints.setFormats(ZXING_DECODE_FORMAT);
     hints.setTryHarder(ZXING_TRY_HARDER);
     hints.setTryRotate(ZXING_TRY_ROTATE);
     hints.setTryInvert(ZXING_TRY_INVERT);
     hints.setMaxNumberOfSymbols(ZXING_MAX_SYMBOLS);
     hints.setBinarizer(ZXING_BINARIZER);
-
 }
 
-std::vector<ZXing::Barcode> run_zxing_decoder(const cv::Mat& img){
-
+std::vector<ZXing::Barcode> run_zxing_decoder(const cv::Mat& img)
+{
     cv::Mat tmp;
     auto iv = to_zxing_imageview(img, tmp);
     

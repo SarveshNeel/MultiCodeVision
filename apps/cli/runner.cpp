@@ -24,7 +24,8 @@ ImageResultData process_image(const fs::path& imagePath)
     ImageResultData resultData;
 
     cv::Mat img = cv::imread(imagePath.string(), cv::IMREAD_COLOR);
-    if (img.empty()) {
+    if (img.empty()) 
+    {
         std::cerr << "[ERROR] Failed to load image: " << imagePath << std::endl;
         return resultData;
     }
@@ -43,10 +44,9 @@ ImageResultData process_image(const fs::path& imagePath)
 
     LOG(INFO, "Decoding Time (total)        : " << std::fixed << std::setprecision(3) << resultData.decode_ms << " ms");
 
-    if(showWindow){
-
+    if(showWindow)
+    {
         print_results_table(results);
-
         draw_overlay(img, results);
 
         cv::imshow("QR Decode - " + imagePath.filename().string(), img);
@@ -63,17 +63,21 @@ ImageResultData process_image(const fs::path& imagePath)
 
 void run_cli(const fs::path& input)
 {
-    if (fs::is_regular_file(input)) {
+    if (fs::is_regular_file(input)) 
+    {
         process_image(input);
         return;
     }
 
-    if (fs::is_directory(input)) {
+    if (fs::is_directory(input)) 
+    {
 
         std::vector<AggregatePassStats> folderAgg;
 
-        auto find_or_add = [&](const std::string& name) -> AggregatePassStats& {
-            for (auto& a : folderAgg) {
+        auto find_or_add = [&](const std::string& name) -> AggregatePassStats& 
+        {
+            for (auto& a : folderAgg) 
+            {
                 if (a.name == name)
                     return a;
             }
@@ -88,7 +92,8 @@ void run_cli(const fs::path& input)
         int imageCount = 0;
         long long totalDecodedCnt = 0;
         
-        for (const auto& entry : fs::directory_iterator(input)) {
+        for (const auto& entry : fs::directory_iterator(input)) 
+        {
             if (!entry.is_regular_file())
                 continue;
             if (!has_image_extension(entry.path()))
@@ -101,7 +106,8 @@ void run_cli(const fs::path& input)
             imageCount++;
 
             // Aggregate per-pass stats from last processed image
-            for (const auto& ps : g_lastPassStats) {
+            for (const auto& ps : g_lastPassStats) 
+            {
                 auto& a = find_or_add(ps.name);
                 a.raw += ps.raw;
                 a.added += ps.added;
@@ -111,7 +117,8 @@ void run_cli(const fs::path& input)
             }
 
             //Calculate total time spent for processing all passes across the folder
-            for(const auto& ps : g_lastPassStats) {
+            for(const auto& ps : g_lastPassStats) 
+            {
                 totalPassTime += ps.ms;
             }
         }

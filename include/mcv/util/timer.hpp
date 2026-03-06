@@ -4,13 +4,15 @@
 #include <chrono>
 #include <mcv/util/logging.hpp>
 
-struct ScopedTimer {
+struct ScopedTimer 
+{
     std::string name;
     std::chrono::steady_clock::time_point start;
 
     ScopedTimer(const std::string &n) : name(n), start(std::chrono::steady_clock::now()) {}
 
-    ~ScopedTimer() {
+    ~ScopedTimer() 
+    {
         auto end = std::chrono::steady_clock::now();
         double ms = std::chrono::duration<double, std::milli>(end - start).count();
 

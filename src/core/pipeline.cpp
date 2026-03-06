@@ -15,7 +15,8 @@
 std::vector<PassStats> g_lastPassStats;
 std::vector<PassStats> g_passStats;
 
-auto center_of(const QRResult& q) {
+auto center_of(const QRResult& q) 
+{
     cv::Point2f c(0.f, 0.f);
     if (q.corners.size() != 4)
         return c;
@@ -25,13 +26,15 @@ auto center_of(const QRResult& q) {
     return c;
 }
 
-auto is_duplicate(const QRResult& a, const QRResult& b) {
+auto is_duplicate(const QRResult& a, const QRResult& b) 
+{
     // Prefer exact text match when available
     if (!a.text.empty() && !b.text.empty() && a.text == b.text)
         return true;
 
     // Fallback: same spatial location (helps when text decode differs across passes)
-    if (a.corners.size() == 4 && b.corners.size() == 4) {
+    if (a.corners.size() == 4 && b.corners.size() == 4) 
+    {
         const cv::Point2f ca = center_of(a);
         const cv::Point2f cb = center_of(b);
         return cv::norm(ca - cb) < 18.0f;
@@ -78,18 +81,22 @@ std::vector<QRResult> run_pipeline(const cv::Mat& img)
             r.corners.push_back(cv::Point2f(pos.bottomLeft().x * s, pos.bottomLeft().y * s));
 
             // Fallback for difficult symbols (includes upscaled retry)
-            if (r.text.empty() && r.corners.size() == 4) {
+            if (r.text.empty() && r.corners.size() == 4) 
+            {
                 r.text = decode_with_fallback(img, r.corners);
             }
 
             bool dup = false;
-            for (const auto& existing : results) {
-                if (is_duplicate(existing, r)) {
+            for (const auto& existing : results) 
+            {
+                if (is_duplicate(existing, r)) 
+                {
                     dup = true;
                     break;
                 }
             }
-            if (!dup && !r.text.empty()) {
+            if (!dup && !r.text.empty()) 
+            {
                 results.push_back(std::move(r));
                 stats.added++;
             }
@@ -100,7 +107,8 @@ std::vector<QRResult> run_pipeline(const cv::Mat& img)
         g_passStats.push_back(std::move(stats));
     }
 
-    if (showWindow) {
+    if (showWindow) 
+    {
         print_pass_summary();
     }
 

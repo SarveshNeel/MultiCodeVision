@@ -5,7 +5,8 @@ cv::Mat warp_qr_patch(const cv::Mat& img, const std::vector<cv::Point2f>& corner
     if (corners.size() != 4) return cv::Mat();
 
     std::vector<cv::Point2f> src = corners;
-    std::vector<cv::Point2f> dst = {
+    std::vector<cv::Point2f> dst = 
+    {
         {0.f, 0.f},
         {static_cast<float>(out_size - 1), 0.f},
         {static_cast<float>(out_size - 1), static_cast<float>(out_size - 1)},
