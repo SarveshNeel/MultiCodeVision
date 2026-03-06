@@ -1,17 +1,6 @@
 #pragma once
 #include <mcv/decode/zxing_decoder.hpp>
 
-//----------------------------------------ZXing Decoder Configuration
-const auto ZXING_DECODE_FORMAT = ZXing::BarcodeFormat::QRCode;
-const auto ZXING_BINARIZER = ZXing::Binarizer::LocalAverage;
-
-const bool ZXING_TRY_HARDER = true;
-const bool ZXING_TRY_ROTATE = true;
-const bool ZXING_TRY_INVERT = true;
-const int ZXING_MAX_SYMBOLS = 40;
-
-//------------------------------------------------Image Preprocessing
-
 enum BaseImage 
 {
     GRAY,
@@ -25,6 +14,15 @@ struct PreprocessPassConfig
     std::vector<BaseImage> ops;
     float scale = 1.0f;
 };
+
+//-------------ZXING DECODER------------------
+const auto ZXING_DECODE_FORMAT = ZXing::BarcodeFormat::QRCode;
+const auto ZXING_BINARIZER = ZXing::Binarizer::LocalAverage;
+
+const bool ZXING_TRY_HARDER = true;
+const bool ZXING_TRY_ROTATE = true;
+const bool ZXING_TRY_INVERT = true;
+const int ZXING_MAX_SYMBOLS = 40;
 
 //------------ADAPTIVE THRESHOLD---------------
 const int ADAPTIVE_BLOCK_SIZE = 31;
