@@ -13,6 +13,7 @@
 #include <mcv/util/timer.hpp>
 #include <mcv/core/pipeline.hpp>
 #include <mcv/core/GlobalVariables.hpp>
+#include <mcv/output/overlay.hpp>
 
 namespace fs = std::filesystem;
 
@@ -40,33 +41,14 @@ ImageResultData process_image(const fs::path& imagePath)
     resultData.decode_ms = elapsed_ms(start_timer, end_timer);
     resultData.decodedCnt = (long long) results.size();
 
-    //TODO : shift in the overlay module 
-    for (size_t i = 0; i < results.size(); ++i) {
-
-        std::vector<cv::Point> poly;
-        for (const auto& p : results[i].corners)
-            poly.emplace_back(cvRound(p.x), cvRound(p.y));
-
-        if (poly.size() >= 4)
-            cv::polylines(img, poly, true, {0,255,0}, 2);
-        
-        cv::putText(img,
-            "QR " + std::to_string(i),
-            poly[0],
-            cv::FONT_HERSHEY_SIMPLEX,
-            1.6,
-            cv::Scalar(0, 255, 0),
-            2,
-            cv::LINE_AA);
-    }
-
     LOG(INFO, "Decoding Time (total)        : " << std::fixed << std::setprecision(3) << resultData.decode_ms << " ms");
 
-    if (showWindow) {
-        print_results_table(results);
-    }
+    if(showWindow){
 
-    if (showWindow) {
+        print_results_table(results);
+
+        draw_overlay(img, results);
+
         cv::imshow("QR Decode - " + imagePath.filename().string(), img);
         cv::waitKey(0);
         cv::destroyAllWindows();
