@@ -11,36 +11,10 @@
 #include <mcv/preprocess/image_ops.hpp>
 #include <mcv/decode/zxing_decoder.hpp>
 #include <mcv/decode/fallback_decoder.hpp>
+#include <mcv/util/geometry.hpp>
 
 std::vector<PassStats> g_lastPassStats;
 std::vector<PassStats> g_passStats;
-
-auto center_of(const QRResult& q) 
-{
-    cv::Point2f c(0.f, 0.f);
-    if (q.corners.size() != 4)
-        return c;
-    for (const auto& p : q.corners)
-        c += p;
-    c *= 0.25f;
-    return c;
-}
-
-auto is_duplicate(const QRResult& a, const QRResult& b) 
-{
-    // Prefer exact text match when available
-    if (!a.text.empty() && !b.text.empty() && a.text == b.text)
-        return true;
-
-    // Fallback: same spatial location (helps when text decode differs across passes)
-    if (a.corners.size() == 4 && b.corners.size() == 4) 
-    {
-        const cv::Point2f ca = center_of(a);
-        const cv::Point2f cb = center_of(b);
-        return cv::norm(ca - cb) < 18.0f;
-    }
-    return false;
-}
 
 std::vector<QRResult> run_pipeline(const cv::Mat& img)
 {
