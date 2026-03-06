@@ -14,8 +14,8 @@ Example:
 
 python scripts/export_stats.py \
     --app ../build/app \
-    --images ../datasets/batch \
-    --out reports/exp1
+    --images ../datasets/mixed \
+    --out reports
 """
 
 import argparse
