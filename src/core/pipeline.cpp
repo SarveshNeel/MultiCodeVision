@@ -1,5 +1,6 @@
 #include <vector>
 #include <opencv2/opencv.hpp>
+#include <omp.h>
 
 #include <mcv/core/types.hpp>
 #include <mcv/core/pipeline.hpp>
@@ -28,16 +29,22 @@ std::vector<QRResult> run_pipeline(const cv::Mat& img)
     // Build preprocessing passes
     std::vector<ZXPass> passes = build_preprocess_passes(img);
 
-    for (const auto& pass : passes)
+    g_passStats.resize(passes.size());
+
+    #pragma omp parallel for
+    for (int i = 0; i < static_cast<int>(passes.size()); ++i)
     {
+        const auto& pass = passes[i];
+
         PassStats stats;
         stats.name = pass.type;
 
         const auto start_timer = std::chrono::steady_clock::now();
 
         auto zresults = run_zxing_decoder(pass.img);
-
         stats.raw = static_cast<int>(zresults.size());
+
+        std::vector<QRResult> local_results;
 
         for (const auto& zr : zresults)
         {
@@ -49,36 +56,54 @@ std::vector<QRResult> run_pipeline(const cv::Mat& img)
 
             auto pos = zr.position();
             const float s = pass.coordScale;
+
             r.corners.push_back(cv::Point2f(pos.topLeft().x * s, pos.topLeft().y * s));
             r.corners.push_back(cv::Point2f(pos.topRight().x * s, pos.topRight().y * s));
             r.corners.push_back(cv::Point2f(pos.bottomRight().x * s, pos.bottomRight().y * s));
             r.corners.push_back(cv::Point2f(pos.bottomLeft().x * s, pos.bottomLeft().y * s));
 
-            // Fallback for difficult symbols (includes upscaled retry)
-            if (r.text.empty() && r.corners.size() == 4) 
+            if (r.text.empty() && r.corners.size() == 4)
             {
                 r.text = decode_with_fallback(img, r.corners);
             }
 
-            bool dup = false;
-            for (const auto& existing : results) 
+            if (!r.text.empty())
             {
-                if (is_duplicate(existing, r)) 
-                {
-                    dup = true;
-                    break;
-                }
-            }
-            if (!dup && !r.text.empty()) 
-            {
-                results.push_back(std::move(r));
-                stats.added++;
+                local_results.push_back(std::move(r));
             }
         }
+
+        int added_local = 0;
+
+    #pragma omp critical
+        {
+            for (auto& r : local_results)
+            {
+                bool dup = false;
+
+                for (const auto& existing : results)
+                {
+                    if (is_duplicate(existing, r))
+                    {
+                        dup = true;
+                        break;
+                    }
+                }
+
+                if (!dup)
+                {
+                    results.push_back(std::move(r));
+                    added_local++;
+                }
+            }
+        }
+
         const auto end_timer = std::chrono::steady_clock::now();
 
+        stats.added = added_local;
         stats.ms = elapsed_ms(start_timer, end_timer);
-        g_passStats.push_back(std::move(stats));
+
+        g_passStats[i] = stats;
     }
 
     if (showWindow) 
