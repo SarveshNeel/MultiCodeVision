@@ -171,8 +171,7 @@ void print_results_table(const std::vector<QRResult>& results)
 void print_folder_summary_table(std::vector<AggregatePassStats>& agg,
                                        int imageCount,
                                        long long totalDecodedCnt,
-                                       double totalDecodingTime,
-                                       double totalPassTime)
+                                       double totalDecodingTime)
 {
 
     // sort by usefulness: added desc, then time asc
@@ -250,9 +249,11 @@ void print_folder_summary_table(std::vector<AggregatePassStats>& agg,
     double avgDecodingTimePerImage = imageCount > 0 ? totalDecodingTime / imageCount : 0.0;
     LOG(INFO, "Avg Time for Complete Decoding per Image : " << avgDecodingTimePerImage << " ms" << std::endl);
 
-    double avgPassTimePerImage = imageCount > 0 ? totalPassTime / imageCount : 0.0;
-    LOG(INFO, "Avg Time for Processing all Passes per Image : " << avgPassTimePerImage << " ms" << std::endl);
+    //No Longer Relevant after OpenMP multi-threading for decode stage
 
-    double avgTimeToApplyPass = avgDecodingTimePerImage - avgPassTimePerImage;
-    LOG(INFO, "Avg Time for Preprocessing per Image   : " << avgTimeToApplyPass << " ms" << std::endl);
+    // double avgPassTimePerImage = imageCount > 0 ? totalPassTime / imageCount : 0.0;
+    // LOG(INFO, "Avg Time for Processing all Passes per Image : " << avgPassTimePerImage << " ms" << std::endl);
+
+    // double avgTimeToApplyPass = avgDecodingTimePerImage - avgPassTimePerImage;
+    // LOG(INFO, "Avg Time for Preprocessing per Image   : " << avgTimeToApplyPass << " ms" << std::endl);
 }

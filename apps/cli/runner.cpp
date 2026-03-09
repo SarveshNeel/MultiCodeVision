@@ -117,13 +117,13 @@ void run_cli(const fs::path& input)
             }
 
             //Calculate total time spent for processing all passes across the folder
-            for(const auto& ps : g_lastPassStats) 
-            {
-                totalPassTime += ps.ms;
-            }
+            // for(const auto& ps : g_lastPassStats) 
+            // {
+            //     totalPassTime += ps.ms;
+            // }
         }
 
-        print_folder_summary_table(folderAgg, imageCount, totalDecodedCnt, totalDecodingTime, totalPassTime);
+        print_folder_summary_table(folderAgg, imageCount, totalDecodedCnt, totalDecodingTime);
         return;
     }
 
