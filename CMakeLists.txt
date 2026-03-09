@@ -5,12 +5,22 @@ project(MultiCodeVision)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(APPLE)
+    set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp")
+    set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp")
+    set(OpenMP_C_LIB_NAMES "omp")
+    set(OpenMP_CXX_LIB_NAMES "omp")
+    set(OpenMP_omp_LIBRARY /opt/homebrew/opt/libomp/lib/libomp.dylib)
+    set(OpenMP_INCLUDE_DIR /opt/homebrew/opt/libomp/include)
+endif()
+
 # ------------------------------------------------
 # Dependencies
 # ------------------------------------------------
 
 find_package(OpenCV REQUIRED)
 find_package(ZXing REQUIRED)
+find_package(OpenMP REQUIRED)
 
 # ------------------------------------------------
 # Automatically collect sources
@@ -54,13 +64,17 @@ add_library(mcv_core
 
 target_link_libraries(mcv_core
     PUBLIC
-    ${OpenCV_LIBS}
-    ZXing::ZXing
+        ${OpenCV_LIBS}
+        ZXing::ZXing
+    PRIVATE
+        OpenMP::OpenMP_CXX
 )
 
 target_include_directories(mcv_core
     PUBLIC
-    include
+        include
+    PRIVATE
+        ${OpenMP_INCLUDE_DIR}
 )
 
 # ------------------------------------------------

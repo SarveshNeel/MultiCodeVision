@@ -1,6 +1,7 @@
 #include <vector>
 #include <unordered_map>
 #include <string>
+#include <omp.h>
 
 #include <mcv/preprocess/image_ops.hpp>
 #include <mcv/output/tables.hpp>
@@ -25,12 +26,13 @@ std::vector<ZXPass> build_preprocess_passes(const cv::Mat& img)
 
         for (auto op : passCfg.ops)
         {
-            std::size_t key = build_hash(runningHash, op, passCfg.scale);
+            std::size_t key = build_hash(runningHash, op, (op == BaseImage::UPSCALE ? passCfg.scale : 0.0));
 
             auto it = cache.find(key);
             if (it != cache.end())
             {
                 current = it->second;
+                runningHash = key;
                 continue;
             }
 
@@ -41,6 +43,7 @@ std::vector<ZXPass> build_preprocess_passes(const cv::Mat& img)
                 case BaseImage::GRAY:
                 {
                     result = gray;
+                    runningHash = key;
                     break;
                 }
 
@@ -81,6 +84,7 @@ std::vector<ZXPass> build_preprocess_passes(const cv::Mat& img)
 
             cache[key] = result;
             current = result;
+            runningHash = key;
         }
 
         std::string label;
