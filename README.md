@@ -1,22 +1,13 @@
 HOW TO BUILD?
 
 From project root, Configure Project:
-    cmake -S . -B build
+    cmake -S . -B build -G Ninja
 
 Compile:
     cmake --build build
 
-
-EXECUTABLES GENERATED
-
-Inside build/ you will get:
-
-    build/
-    ├── app
-
-
 EXAMPLE RUN
 
-./build/app datasets/mixed/real.bmp
+./runtime/windows/MultiCodeVisionCLI.exe datasets/mixed/real.bmp
                 or
-./build/app datasets/mixed --batch
+./runtime/windows/MultiCodeVisionCLI.exe datasets/mixed --batch

@@ -5,6 +5,14 @@ project(MultiCodeVision)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# ------------------------------------------------
+# Output directories
+# ------------------------------------------------
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
 if(APPLE)
     set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp")
     set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp")
@@ -58,19 +66,23 @@ set(MCV_CORE_SOURCES
 # Core Library
 # ------------------------------------------------
 
-add_library(mcv_core
+add_library(Lens
     ${MCV_CORE_SOURCES}
 )
 
-target_link_libraries(mcv_core
+target_link_libraries(Lens
     PUBLIC
-        ${OpenCV_LIBS}
+        opencv_core
+        opencv_imgproc
+        opencv_imgcodecs
+        opencv_highgui
+        opencv_objdetect
         ZXing::ZXing
     PRIVATE
         OpenMP::OpenMP_CXX
 )
 
-target_include_directories(mcv_core
+target_include_directories(Lens
     PUBLIC
         include
     PRIVATE
@@ -85,13 +97,28 @@ file(GLOB CLI_SRC
     apps/cli/*.cpp
 )
 
-add_executable(app
+add_executable(MultiCodeVisionCLI
     ${CLI_SRC}
 )
 
-target_link_libraries(app
+target_link_libraries(MultiCodeVisionCLI
     PRIVATE
-    mcv_core
+    Lens
+)
+
+# ------------------------------------------------
+# Copy executable to runtime/windows
+# ------------------------------------------------
+
+add_custom_command(TARGET MultiCodeVisionCLI POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        ${CMAKE_SOURCE_DIR}/runtime/windows
+
+    COMMAND ${CMAKE_COMMAND} -E copy
+        $<TARGET_FILE:MultiCodeVisionCLI>
+        ${CMAKE_SOURCE_DIR}/runtime/windows/
+
+    COMMENT "Copying MultiCodeVisionCLI.exe to runtime/windows"
 )
 
 # ------------------------------------------------
@@ -99,5 +126,5 @@ target_link_libraries(app
 # ------------------------------------------------
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_options(mcv_core PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(Lens PRIVATE -Wall -Wextra -Wpedantic)
 endif()
