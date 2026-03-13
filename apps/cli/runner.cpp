@@ -49,9 +49,11 @@ ImageResultData process_image(const fs::path& imagePath)
         print_results_table(results);
         draw_overlay(img, results);
 
-        cv::imshow("QR Decode - " + imagePath.filename().string(), img);
+        draw_timing(img, resultData.decode_ms);
+
+        show_debug_frame("MultiCodeVision Debug", img);
+
         cv::waitKey(0);
-        cv::destroyAllWindows();
     }
 
     return resultData;
