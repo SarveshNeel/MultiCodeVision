@@ -24,7 +24,7 @@ void configure_zxing_decoder()
     hints.setBinarizer(ZXING_BINARIZER);
 }
 
-std::vector<ZXing::Barcode> run_zxing_decoder(const cv::Mat& img)
+ZXing::Results run_zxing_decoder(const cv::Mat& img)
 {
     cv::Mat tmp;
     auto iv = to_zxing_imageview(img, tmp);

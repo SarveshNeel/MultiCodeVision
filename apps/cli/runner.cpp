@@ -17,8 +17,6 @@
 
 namespace fs = std::filesystem;
 
-bool showWindow = true;
-
 ImageResultData process_image(const fs::path& imagePath)
 {
     ImageResultData resultData;
