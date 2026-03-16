@@ -14,9 +14,6 @@
 #include <mcv/decode/fallback_decoder.hpp>
 #include <mcv/util/geometry.hpp>
 
-std::vector<PassStats> g_lastPassStats;
-std::vector<PassStats> g_passStats;
-
 std::vector<QRResult> run_pipeline(const cv::Mat& img)
 {
     std::vector<QRResult> results;
