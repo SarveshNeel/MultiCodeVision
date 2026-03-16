@@ -87,7 +87,7 @@ void run_cli(const fs::path& input)
         };
 
         double totalDecodingTime = 0.0;
-        double totalPassTime = 0.0;
+        // double totalPassTime = 0.0;
 
         int imageCount = 0;
         long long totalDecodedCnt = 0;

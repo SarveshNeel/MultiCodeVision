@@ -21,18 +21,19 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # ------------------------------------------------
 # Dependency paths
 # ------------------------------------------------
+
 set(OPENCV_ROOT "C:/deps/opencv")
-set(ZXING_ROOT "C:/deps/zxing")
+set(ZXING_ROOT  "C:/deps/zxing")
 
 set(OPENCV_3RDPARTY_DIR "${OPENCV_ROOT}/build/3rdparty/lib")
 
-set(ZLIB_LIB "${OPENCV_3RDPARTY_DIR}/libzlib.a")
-set(PNG_LIB "${OPENCV_3RDPARTY_DIR}/liblibpng.a")
-set(JPEG_LIB "${OPENCV_3RDPARTY_DIR}/liblibjpeg-turbo.a")
+set(ZLIB_LIB     "${OPENCV_3RDPARTY_DIR}/libzlib.a")
+set(PNG_LIB      "${OPENCV_3RDPARTY_DIR}/liblibpng.a")
+set(JPEG_LIB     "${OPENCV_3RDPARTY_DIR}/liblibjpeg-turbo.a")
 set(OPENJPEG_LIB "${OPENCV_3RDPARTY_DIR}/liblibopenjp2.a")
 
 set(OPENCV_LIB "${OPENCV_ROOT}/build/lib/libopencv_world4140.a")
-set(ZXING_LIB "${ZXING_ROOT}/lib/libZXing.a")
+set(ZXING_LIB  "${ZXING_ROOT}/lib/libZXing.a")
 
 # ------------------------------------------------
 # OpenMP
@@ -41,7 +42,7 @@ set(ZXING_LIB "${ZXING_ROOT}/lib/libZXing.a")
 find_package(OpenMP REQUIRED)
 
 # ------------------------------------------------
-# Collect project sources
+# Collect sources
 # ------------------------------------------------
 
 file(GLOB_RECURSE CORE_SRC CONFIGURE_DEPENDS
@@ -64,7 +65,19 @@ file(GLOB_RECURSE UTIL_SRC CONFIGURE_DEPENDS
     src/util/*.cpp
 )
 
-set(MCV_CORE_SOURCES
+file(GLOB_RECURSE API_SRC CONFIGURE_DEPENDS
+    src/api/*.cpp
+)
+
+file(GLOB CLI_SRC CONFIGURE_DEPENDS
+    apps/cli/*.cpp
+)
+
+# ------------------------------------------------
+# LensCore (Static library)
+# ------------------------------------------------
+
+add_library(LensCore STATIC
     ${CORE_SRC}
     ${PREPROCESS_SRC}
     ${DECODE_SRC}
@@ -72,32 +85,15 @@ set(MCV_CORE_SOURCES
     ${UTIL_SRC}
 )
 
-# ------------------------------------------------
-# Lens Library (Self-contained DLL)
-# ------------------------------------------------
-
-add_library(Lens SHARED
-    ${MCV_CORE_SOURCES}
-)
-
-target_include_directories(Lens
+target_include_directories(LensCore
     PUBLIC
         ${CMAKE_SOURCE_DIR}/include
-    PRIVATE
-        ${OPENCV_ROOT}/include/
+        ${OPENCV_ROOT}/include
         ${ZXING_ROOT}/include
 )
 
-# Apply static runtime ONLY to the DLL
-target_link_options(Lens PRIVATE
-    -static
-    -static-libgcc
-    -static-libstdc++
-)
-
-# Force inclusion of all objects from static libraries
-target_link_libraries(Lens
-    PRIVATE
+target_link_libraries(LensCore
+    PUBLIC
         -Wl,--whole-archive
         ${OPENCV_LIB}
         ${ZXING_LIB}
@@ -109,15 +105,40 @@ target_link_libraries(Lens
         OpenMP::OpenMP_CXX
 )
 
-target_compile_features(Lens PUBLIC cxx_std_20)
+target_compile_options(LensCore PRIVATE -Wall -Wextra -Wpedantic)
+
+target_compile_features(LensCore PUBLIC cxx_std_20)
+
+# ------------------------------------------------
+# Lens DLL (API for C#)
+# ------------------------------------------------
+
+add_library(Lens SHARED
+    ${API_SRC}
+)
+
+set_target_properties(Lens PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
+target_compile_definitions(Lens PRIVATE LENS_EXPORTS)
+
+target_include_directories(Lens
+    PUBLIC
+        ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(Lens
+    PRIVATE
+        LensCore
+)
+
+target_link_options(Lens PRIVATE
+    -static-libgcc
+    -static-libstdc++
+)
 
 # ------------------------------------------------
 # CLI Application
 # ------------------------------------------------
-
-file(GLOB CLI_SRC CONFIGURE_DEPENDS
-    apps/cli/*.cpp
-)
 
 add_executable(MultiCodeVisionCLI
     ${CLI_SRC}
@@ -125,20 +146,18 @@ add_executable(MultiCodeVisionCLI
 
 target_link_libraries(MultiCodeVisionCLI
     PRIVATE
-        Lens
+        LensCore
 )
 
 target_include_directories(MultiCodeVisionCLI
     PRIVATE
         ${CMAKE_SOURCE_DIR}/include
-        ${OPENCV_ROOT}/include
-        ${ZXING_ROOT}/include
 )
 
 target_compile_features(MultiCodeVisionCLI PRIVATE cxx_std_20)
 
 # ------------------------------------------------
-# Copy runtime artifacts
+# Runtime copy
 # ------------------------------------------------
 
 set(MCV_RUNTIME_DIR ${CMAKE_SOURCE_DIR}/runtime/windows)
@@ -146,19 +165,9 @@ set(MCV_RUNTIME_DIR ${CMAKE_SOURCE_DIR}/runtime/windows)
 add_custom_command(TARGET Lens POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory ${MCV_RUNTIME_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:Lens> ${MCV_RUNTIME_DIR}/
-    COMMENT "Copying Lens.dll to runtime/windows"
 )
 
 add_custom_command(TARGET MultiCodeVisionCLI POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory ${MCV_RUNTIME_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:MultiCodeVisionCLI> ${MCV_RUNTIME_DIR}/
-    COMMENT "Copying MultiCodeVisionCLI.exe to runtime/windows"
 )
-
-# ------------------------------------------------
-# Compiler warnings
-# ------------------------------------------------
-
-if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_options(Lens PRIVATE -Wall -Wextra -Wpedantic)
-endif()
