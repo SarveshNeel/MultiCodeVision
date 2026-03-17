@@ -22,7 +22,7 @@ cmake .. \
   -DBUILD_3RDPARTY_LIBS=ON \
   -DWITH_IPP=OFF \
   -DWITH_TBB=OFF \
-  -DWITH_OPENMP=OFF \
+  -DWITH_OPENMP=ON \
   -DWITH_OPENCL=OFF \
   -DWITH_CUDA=OFF \
   -DWITH_OPENBLAS=OFF \
@@ -41,6 +41,11 @@ cmake .. \
   -DWITH_QT=OFF \
   -DWITH_GTK=OFF \
   -DWITH_WIN32UI=OFF \
+  -DENABLE_AVX2=ON \
+  -DENABLE_SSE4_2=ON \
+  -DENABLE_FAST_MATH=ON \
+  -DCV_ENABLE_INTRINSICS=ON \
+  -DCMAKE_CXX_FLAGS="-O3 -march=native -ffast-math" \
   -DCMAKE_INSTALL_PREFIX=C:/deps/opencv
 
 cmake --build . --config Release
@@ -59,9 +64,10 @@ cmake .. \
   -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_SHARED_LIBS=OFF \
   -DZXING_BUILD_WRITERS=OFF \
-  -DZXING_BUILD_EXAMPLES=OFF \
+  -DBUILD_EXAMPLES=OFF \
   -DZXING_BUILD_BLACKBOX_TESTS=OFF \
-  -DZXING_BUILD_UNIT_TESTS=OFF \
+  -DBUILD_TESTING=OFF \
+  -DCMAKE_CXX_FLAGS="-O3 -march=native -ffast-math -DNDEBUG" \
   -DCMAKE_INSTALL_PREFIX=C:/deps/zxing
 
 cmake --build . --config Release

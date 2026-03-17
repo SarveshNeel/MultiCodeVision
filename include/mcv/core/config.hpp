@@ -32,21 +32,4 @@ extern int ADAPTIVE_C;
 extern double CLAHE_CLIP_LIMIT;
 extern int CLAHE_TILE_SIZE;
 
-inline std::vector<PreprocessPassConfig> PREPROCESS_PIPELINE = {
-    // baseline
-    { {BaseImage::GRAY}, 1.0f },
-
-    // threshold attempt
-    { {BaseImage::GRAY, BaseImage::ADAPTIVE_THRESHOLD}, 1.0f },
-
-    // gray upscales
-    { {BaseImage::GRAY, BaseImage::UPSCALE}, 1.5f },
-    { {BaseImage::GRAY, BaseImage::UPSCALE}, 3.0f },
-
-    // CLAHE passes
-    { {BaseImage::GRAY, BaseImage::CLAHE}, 1.0f },
-
-    // CLAHE upscales
-    { {BaseImage::GRAY, BaseImage::CLAHE, BaseImage::UPSCALE}, 4.0f }
-};
-
+extern std::vector<PreprocessPassConfig> PREPROCESS_PIPELINE;
