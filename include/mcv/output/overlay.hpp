@@ -11,4 +11,4 @@ void draw_overlay(const cv::Mat& img, std::vector<QRResult> &results);
 
 void show_debug_frame(const std::string& title, const cv::Mat& img);
 
-void draw_timing(cv::Mat& img, double ms);
+void draw_timing(cv::Mat& img, ImageResultData resultData);

@@ -47,7 +47,7 @@ ImageResultData process_image(const fs::path& imagePath)
         print_results_table(results);
         draw_overlay(img, results);
 
-        draw_timing(img, resultData.decode_ms);
+        draw_timing(img, resultData);
 
         show_debug_frame("MultiCodeVision Debug", img);
 

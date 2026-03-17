@@ -36,13 +36,23 @@ void show_debug_frame(const std::string& title, const cv::Mat& img)
     cv::imshow(title, img);
 }
 
-void draw_timing(cv::Mat& img, double ms)
+void draw_timing(cv::Mat& img, ImageResultData resultData)
 {
-    std::string txt = "Decode: " + std::to_string(ms) + " ms";
+    std::string txt = "Decode: " + std::to_string(resultData.decode_ms) + " ms";
 
     cv::putText(img,
                 txt,
                 {20,40},
+                cv::FONT_HERSHEY_SIMPLEX,
+                1.6,
+                cv::Scalar(0,0,255),
+                2,
+                cv::LINE_AA);
+    
+    txt = "Count: " + std::to_string(resultData.decodedCnt) + " QRs";
+    cv::putText(img,
+                txt,
+                {20,80},
                 cv::FONT_HERSHEY_SIMPLEX,
                 1.6,
                 cv::Scalar(0,0,255),
