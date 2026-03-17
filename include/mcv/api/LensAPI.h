@@ -102,6 +102,13 @@ LENS_API int Lens_DecodeImage(
     LensDecodeResult* results
 );
 
+LENS_API int Lens_DecodeRawImage(
+    void* handle,
+    uint8_t* data,
+    int width,
+    int height,
+    LensDecodeResult* results);
+
 LENS_API int Lens_Init(void);
 LENS_API void Lens_SetShowWindow(int enabled);
 LENS_API void Lens_Shutdown(void);

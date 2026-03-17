@@ -190,3 +190,57 @@ LENS_API void Lens_SetConfig(LensHandle handle, LensConfig cfg)
     CLAHE_CLIP_LIMIT = cfg.claheClipLimit;
     CLAHE_TILE_SIZE = cfg.claheTileSize;
 }
+
+LENS_API int Lens_DecodeRawImage(
+    void* handle,
+    uint8_t* data,
+    int width,
+    int height,
+    LensDecodeResult* results)
+{
+    cv::Mat img(height, width, CV_8UC1, data);
+
+    auto decoded = run_pipeline(img);
+
+    int count = (int)decoded.size();
+
+    for (int i = 0; i < count; ++i)
+    {
+        const auto& r = decoded[i];
+
+        std::strncpy(results[i].text,
+                        r.text.c_str(),
+                        sizeof(results[i].text) - 1);
+
+        results[i].text[sizeof(results[i].text) - 1] = '\0';
+
+        if (r.corners.size() < 4)
+        {
+            results[i].x = 0;
+            results[i].y = 0;
+            results[i].width = 0;
+            results[i].height = 0;
+            continue;
+        }
+
+        float minX = r.corners[0].x;
+        float minY = r.corners[0].y;
+        float maxX = r.corners[0].x;
+        float maxY = r.corners[0].y;
+
+        for (const auto& p : r.corners)
+        {
+            minX = std::min(minX, p.x);
+            minY = std::min(minY, p.y);
+            maxX = std::max(maxX, p.x);
+            maxY = std::max(maxY, p.y);
+        }
+
+        results[i].x = static_cast<int>(minX);
+        results[i].y = static_cast<int>(minY);
+        results[i].width  = static_cast<int>(maxX - minX);
+        results[i].height = static_cast<int>(maxY - minY);
+    }
+
+    return count;
+}

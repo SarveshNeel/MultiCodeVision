@@ -45,7 +45,7 @@ void draw_timing(cv::Mat& img, double ms)
                 {20,40},
                 cv::FONT_HERSHEY_SIMPLEX,
                 1.6,
-                cv::Scalar(255,0,0),
+                cv::Scalar(0,0,255),
                 2,
                 cv::LINE_AA);
 }
