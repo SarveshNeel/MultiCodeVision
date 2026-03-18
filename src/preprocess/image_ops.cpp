@@ -8,13 +8,36 @@
 #include <mcv/core/config.hpp>
 #include <mcv/util/hashing.hpp>
 
+int get_resize_interpolation()
+{
+    switch (UPSCALE_INTERPOLATION) {
+        case 0: return cv::INTER_NEAREST;
+        case 1: return cv::INTER_LINEAR;
+        case 2: return cv::INTER_CUBIC;
+        case 3: return cv::INTER_AREA;
+        case 4: return cv::INTER_LANCZOS4;
+        default: return cv::INTER_CUBIC;
+    }
+}
+
 std::vector<ZXPass> build_preprocess_passes(const cv::Mat& img)
 {
     cv::Mat gray;
-    if (img.channels() == 3)
+    if (img.channels() == 3) 
+    {
         cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
-    else
-        gray = img;
+    } 
+    else if (img.channels() == 4) 
+    {
+        cv::cvtColor(img, gray, cv::COLOR_BGRA2GRAY);
+    } 
+    else 
+    {
+        if (img.type() != CV_8UC1)
+            img.convertTo(gray, CV_8UC1);
+        else
+            gray = img.clone();
+    }
 
     std::unordered_map<std::size_t, cv::Mat> cache;
     std::vector<ZXPass> passes;
@@ -76,7 +99,7 @@ std::vector<ZXPass> build_preprocess_passes(const cv::Mat& img)
                         cv::Size(),
                         passCfg.scale,
                         passCfg.scale,
-                        cv::INTER_CUBIC
+                        get_resize_interpolation()
                     );
                     break;
                 }

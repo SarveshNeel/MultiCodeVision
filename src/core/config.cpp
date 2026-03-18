@@ -12,7 +12,9 @@ int ADAPTIVE_BLOCK_SIZE = 31;
 int ADAPTIVE_C = 3;
 
 double CLAHE_CLIP_LIMIT = 2.5;
-int CLAHE_TILE_SIZE = 10;
+int CLAHE_TILE_SIZE = 8;
+
+int UPSCALE_INTERPOLATION = 2; // cv::INTER_CUBIC
 
 std::vector<PreprocessPassConfig> PREPROCESS_PIPELINE = {
     // baseline

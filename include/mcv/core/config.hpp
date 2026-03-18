@@ -32,4 +32,6 @@ extern int ADAPTIVE_C;
 extern double CLAHE_CLIP_LIMIT;
 extern int CLAHE_TILE_SIZE;
 
+extern int UPSCALE_INTERPOLATION;
+
 extern std::vector<PreprocessPassConfig> PREPROCESS_PIPELINE;

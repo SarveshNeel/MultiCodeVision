@@ -2,6 +2,9 @@ Create the directory : C:\deps
 
 git clone https://github.com/opencv/opencv.git
 cd opencv
+
+git checkout 4.13.0
+
 mkdir build
 cd build
 
@@ -55,20 +58,18 @@ cmake --install .
 
 git clone https://github.com/zxing-cpp/zxing-cpp.git
 cd zxing-cpp
-git checkout v2.2.1
+
+git fetch --tags
+git checkout v3.0.2
+git submodule update --init --recursive
+
 mkdir build
 cd build
 
-cmake .. \
-  -G Ninja \
+cmake .. -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
-  -DBUILD_SHARED_LIBS=OFF \
-  -DZXING_BUILD_WRITERS=OFF \
-  -DBUILD_EXAMPLES=OFF \
-  -DZXING_BUILD_BLACKBOX_TESTS=OFF \
-  -DBUILD_TESTING=OFF \
-  -DCMAKE_CXX_FLAGS="-O3 -march=native -ffast-math -DNDEBUG" \
-  -DCMAKE_INSTALL_PREFIX=C:/deps/zxing
+  -DZXING_WRITERS=OFF \
+  -DZXING_EXAMPLES=OFF \
+  -DBUILD_TESTING=OFF
 
-cmake --build . --config Release
-cmake --install .
+cmake --build . -j 8

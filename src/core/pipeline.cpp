@@ -1,6 +1,7 @@
 #include <vector>
 #include <opencv2/opencv.hpp>
 #include <omp.h>
+#include <atomic>
 
 #include <mcv/core/types.hpp>
 #include <mcv/core/pipeline.hpp>
@@ -36,10 +37,46 @@ std::vector<QRResult> run_pipeline(const cv::Mat& img)
         PassStats stats;
         stats.name = pass.type;
 
+        // static std::atomic<int> dump_id{0};
+
+        // int id = i;
+
+        // std::string filename = "debug_pass_" + std::to_string(i) + "_" + std::to_string(id) + ".png";
+
+        // cv::Mat debug_img = pass.img;
+
+        // // Ensure grayscale consistency
+        // if (debug_img.channels() == 3)
+        //     cv::cvtColor(debug_img, debug_img, cv::COLOR_BGR2GRAY);
+
+        // cv::imwrite(filename, debug_img);
+
         const auto start_timer = std::chrono::steady_clock::now();
 
         auto zresults = run_zxing_decoder(pass.img);
         stats.raw = static_cast<int>(zresults.size());
+
+        // std::cout << "[PASS " << i << "] " << pass.type
+        //   << " -> decoded: " << zresults.size()
+        //   << std::endl;
+        
+        // for (const auto& zr : zresults)
+        // {
+        //     if (!zr.isValid())
+        //         continue;
+
+        //     std::string txt = zr.text();
+        //     if (txt.empty())
+        //         txt = "<empty>";
+
+        //     auto pos = zr.position();
+        //     std::cout << "    text: " << txt
+        //             << "  TL=(" << pos.topLeft().x << "," << pos.topLeft().y << ")"
+        //             << "  TR=(" << pos.topRight().x << "," << pos.topRight().y << ")"
+        //             << "  BR=(" << pos.bottomRight().x << "," << pos.bottomRight().y << ")"
+        //             << "  BL=(" << pos.bottomLeft().x << "," << pos.bottomLeft().y << ")"
+        //             << std::endl;
+        // }
 
         std::vector<QRResult> local_results;
 
@@ -107,6 +144,11 @@ std::vector<QRResult> run_pipeline(const cv::Mat& img)
     {
         print_pass_summary();
     }
+
+    // std::cout << "\nFinal unique results:\n";
+    // for (const auto& r : results) {
+    //     std::cout << "  " << r.text << "\n";
+    // }
 
     LOG(INFO, "Total unique QRs decoded: " << results.size());
 

@@ -2,14 +2,14 @@
 
 #include <vector>
 #include <opencv2/opencv.hpp>
-#include <ZXing/ReadBarcode.h>
-#include <ZXing/BarcodeFormat.h>
-#include <ZXing/ReaderOptions.h>
-#include <ZXing/ImageView.h>
-#include <ZXing/Result.h>
+#include <ReadBarcode.h>
+#include <BarcodeFormat.h>
+#include <ReaderOptions.h>
+#include <ImageView.h>
+// #include <Result.h>
 
 // Run ZXing decoding on an image
-ZXing::Results run_zxing_decoder(const cv::Mat& img);
+std::vector<ZXing::Barcode> run_zxing_decoder(const cv::Mat& img);
 
 // Convert OpenCV image to ZXing ImageView
 ZXing::ImageView to_zxing_imageview(const cv::Mat& img, cv::Mat& gray_out);

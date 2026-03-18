@@ -23,7 +23,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # ------------------------------------------------
 
 set(OPENCV_ROOT "C:/deps/opencv")
-set(ZXING_ROOT  "C:/deps/zxing")
+set(ZXING_ROOT  "C:/deps/zxing-cpp")
 
 set(OPENCV_3RDPARTY_DIR "${OPENCV_ROOT}/build/3rdparty/lib")
 
@@ -33,7 +33,10 @@ set(JPEG_LIB     "${OPENCV_3RDPARTY_DIR}/liblibjpeg-turbo.a")
 set(OPENJPEG_LIB "${OPENCV_3RDPARTY_DIR}/liblibopenjp2.a")
 
 set(OPENCV_LIB "${OPENCV_ROOT}/build/lib/libopencv_world4140.a")
-set(ZXING_LIB  "${ZXING_ROOT}/lib/libZXing.a")
+set(ZXING_LIB  "${ZXING_ROOT}/build/core/libZXing.a")
+
+include_directories(${ZXING_ROOT}/core/src)
+include_directories(${ZXING_ROOT}/build/core)
 
 # ------------------------------------------------
 # OpenMP
